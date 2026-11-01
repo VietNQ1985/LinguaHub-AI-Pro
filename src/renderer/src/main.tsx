@@ -1,7 +1,6 @@
 import React from 'react'
 import { createRoot } from 'react-dom/client'
 import './style.css'
-import './dashboard.css'
 import { AiPanel } from './AiPanel'
 
 type WorkspaceService = 'whatsapp' | 'teams'
@@ -135,7 +134,7 @@ function App() {
 
   return <div className="app" lang="vi">
     <header className="topbar">
-      <div className="topbar-brand"><span className="brand-mark">文</span><span>LinguaHub <small>AI</small></span></div>
+      <div className="topbar-brand"><span className="brand-mark">VI</span><span>LinguaHub <small>AI</small></span></div>
       <nav className="workspace-tabs" aria-label="Chọn ứng dụng trò chuyện">
         <button type="button" className={activeService === 'whatsapp' ? 'workspace-tab active' : 'workspace-tab'} aria-current={activeService === 'whatsapp' ? 'page' : undefined} onClick={() => void open('whatsapp')}>WhatsApp</button>
         <button type="button" className={activeService === 'teams' ? 'workspace-tab active' : 'workspace-tab'} aria-current={activeService === 'teams' ? 'page' : undefined} onClick={() => void open('teams')}>Microsoft Teams</button>
