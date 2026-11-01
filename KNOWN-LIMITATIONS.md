@@ -1,5 +1,15 @@
 # Giới hạn và việc cần xác minh
 
+## Lỗi đăng nhập ChatGPT: 3p_login_workspace_scope_denied (01/11/2026)
+
+- OpenAI từ chối khi tài khoản đang đăng nhập không thuộc workspace gắn với mã đăng ký OAuth client của ứng dụng. Không phải lỗi WhatsApp/Teams hoặc bằng chứng gói Plus đã hết.
+- Nút đăng nhập cũ ưu tiên tái sử dụng mã đăng ký đã lưu. Khi chuyển tài khoản hoặc workspace, cách này có thể gây lỗi từ chối phạm vi workspace.
+- Nhánh này bổ sung lựa chọn **Đổi tài khoản hoặc không gian làm việc** trong **Cài đặt → Tài khoản ChatGPT**; hành động này chủ động dùng `dynamic_agent_client` để đăng ký mới mà không tái sử dụng mã đăng ký của tài khoản trước.
+- Trường hợp đăng ký mới bị từ chối/trả lỗi trước khi lưu phiên thành công, file token cũ và mã đăng ký hiện tại vẫn được giữ. Nếu đăng ký mới thành công, nó thay thế kết nối ChatGPT hiện tại trong LinguaHub (chưa hỗ trợ nhiều tài khoản cùng lúc).
+- Không cần xóa thông tin đăng nhập WhatsApp/Teams, không thay đổi gói Plus và không bật API trả phí.
+- **Chưa thử thực tế** với tài khoản và workspace bị lỗi. Các kiểm thử mới chỉ mô phỏng callback và lần trao đổi mã bị từ chối; cần Codex chạy test và thử OAuth thật trên Windows.
+
+
 ## Bản cải tiến giao diện tiếng Việt (chưa nghiệm thu)
 
 - Mã nguồn đã thay sidebar lớn bằng thanh WhatsApp/Teams phía trên và panel dịch tiếng Việt phía phải; quyền riêng tư, dữ liệu và thông báo được đưa vào Cài đặt nâng cao.
