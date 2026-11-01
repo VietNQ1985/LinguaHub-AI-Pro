@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { LiveTranslation } from './LiveTranslation'
 import { AiResult } from './AiResult'
 import { ChatGPTAccount } from './ChatGPTAccount'
+import { AdvancedSettings } from './AdvancedSettings'
 
 type PanelMode = 'translate' | 'reply' | 'settings'
 type Theme = 'light' | 'dark'
@@ -156,6 +157,7 @@ export function AiPanel() {
           <label className="checkbox-label"><input type="checkbox" checked={masking} onChange={async event => { const next = event.target.checked; try { await window.lingua.setMasking(next); setMasking(next) } catch { setError('Không cập nhật được quyền riêng tư.') } }}/> Che email và số điện thoại trước khi gửi AI</label>
           <p className="helper-text">Chức năng che thông tin có thể bỏ sót dữ liệu nhạy cảm. Chỉ bật dịch cloud khi anh đồng ý.</p>
         </div>
+        <details className="advanced-settings"><summary>Cài đặt nâng cao</summary><AdvancedSettings /></details>
       </div>}
     </div>
     {error && <p className="assistant-error" role="alert">{error}</p>}
