@@ -1,0 +1,17 @@
+node_modules/
+.package-*/
+.ocr-validation/
+.playwright-cli/
+output/
+out/
+release/
+dist/
+.vite/
+coverage/
+*.log
+*.sqlite
+*.sqlite-journal
+*.enc
+.env
+.env.*
+!.env.example
