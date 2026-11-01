@@ -123,7 +123,7 @@ export async function createLearningStore(directory: string, wasmPath: string) {
       const rows = db.select().from(appSettings).all()
       const values = Object.fromEntries(rows.map(row => [row.key, row.value]))
       const savedWidth=Number(values.panelWidth)
-      return { theme: values.theme === 'light' ? 'light' : 'dark', model: values.model || '', panelWidth:Number.isFinite(savedWidth)&&savedWidth>=280&&savedWidth<=560?savedWidth:360 }
+      return { theme: values.theme === 'dark' ? 'dark' : 'light', model: values.model || '', panelWidth:Number.isFinite(savedWidth)&&savedWidth>=280&&savedWidth<=560?savedWidth:360 }
     },
     async setPreferences(input: unknown) {
       ensureHealthy()
