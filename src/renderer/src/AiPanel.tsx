@@ -119,7 +119,7 @@ export function AiPanel() {
         <textarea id="reply-input" value={input} maxLength={12000} onChange={event => { setInput(event.target.value); setOutput(null); requestGeneration.current++ }} placeholder="Ví dụ: Tôi sẽ kiểm tra lại và phản hồi vào sáng mai." />
         {!model && <p className="helper-text">Anh hãy chọn dịch vụ AI trong phần Cài đặt.</p>}
         <button type="button" className="primary-button" disabled={!input.trim() || !model || busy} onClick={() => void sendReplyRequest()}>{busy ? 'Đang tạo gợi ý…' : 'Gợi ý câu trả lời'}</button>
-        {output && <div className="reply-results"><AiResult result={output} /></div>}
+        {output !== null && <div className="reply-results"><AiResult result={output} /></div>}
         <p className="helper-text">Ứng dụng chỉ gợi ý. Anh tự quyết định nội dung và gửi tin nhắn.</p>
       </div>}
 

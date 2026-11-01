@@ -10,7 +10,7 @@ LinguaHub là ứng dụng Windows hiển thị WhatsApp Web hoặc Microsoft Te
 - Những tính năng phụ không còn chiếm diện tích màn hình. Quản lý thông báo, thời hạn giữ dữ liệu và xóa dữ liệu cục bộ nằm trong **Cài đặt nâng cao**.
 - Giao diện tiếng Việt mặc định dùng chế độ sáng cho hồ sơ mới; hồ sơ cũ giữ tùy chọn đã lưu.
 
-**Lưu ý:** Đây là mã nguồn trên nhánh cải tiến. Bộ cài release/ trong tài liệu cũ có thể vẫn là phiên bản trước; bản cải tiến chưa được build/kiểm thử trên Windows qua phiên làm việc này.
+**Bản cài Windows x64 mới** nằm trong `release/LinguaHub-AI-Pro-Setup.exe`; SHA-256: `e02047072c53eecba7aac74cf8ea8cb413834b3069e39d325eb3e76f3942898b`. Bản mới sửa CSP đang chặn Tesseract Web Worker, ảnh OCR dạng data URL và tải model ngôn ngữ.
 
 ## Sử dụng hằng ngày
 
@@ -25,7 +25,7 @@ Lối tắt: Ctrl+1 WhatsApp, Ctrl+2 Teams, Ctrl+R tải lại trang. Ctrl+0 hi�
 
 ## Mức độ kiểm chứng
 
-Đã cập nhật source code giao diện, bổ sung phân biệt tin nhắn trùng nội dung trong cùng lượt OCR và thêm kiểm thử đơn vị cho logic này. **Chưa chạy typecheck, unit test, build Windows hay thử nhận diện thực tế sau những thay đổi trên nhánh**. Kết quả kiểm thử bản cũ bên dưới không chứng minh bản cải tiến đã đạt.
+Đợt kiểm tra nhánh PR #1 đạt `npm run typecheck`, `npm test` (60/60), `npm run build` và `npm run dist`. Ảnh giao diện hiện tại cho thấy OCR đang lỗi; nguyên nhân trong source là CSP chặn worker/blob/data và CDN model. Đã sửa CSP và thêm kiểm thử hồi phục worker, nhưng cần khởi chạy bản cài mới để xác nhận OCR hoạt động trên app thực tế. Chưa xác nhận dịch end-to-end trên hội thoại thật.
 
 ## Học và quyền riêng tư
 
@@ -33,19 +33,19 @@ Lối tắt: Ctrl+1 WhatsApp, Ctrl+2 Teams, Ctrl+R tải lại trang. Ctrl+0 hi�
 - Ở **Cài đặt**, chọn giữ dữ liệu học đến khi tự xóa hoặc tự xóa nội dung cũ hơn 30/90/365 ngày. App hỏi xác nhận trước khi áp dụng kỳ hạn xóa. Nút xóa từ vựng cũng xóa lịch sử học.
 - Mục **Xóa toàn bộ dữ liệu cục bộ** trong Cài đặt sẽ hỏi xác nhận, thử thu hồi ChatGPT, đăng xuất WhatsApp/Teams, rồi xóa cài đặt và dữ liệu học. Anh cần đăng nhập lại sau đó.
 - Bật quyền thông báo WhatsApp/Teams trong **Cài đặt**, rồi bật thông báo Desktop trong từng dịch vụ. Bản cài Windows tạo/sửa shortcut Start Menu với AppUserModelID và ToastActivatorCLSID cho toast. Nút **Thử thông báo Windows** chờ Windows xác nhận yêu cầu toast; tin nhắn thật vẫn cần xác minh.
-- OCR chỉ đọc vùng website đang mở sau khi anh cho phép. Ảnh không lưu và không gửi cloud. Chữ OCR chỉ gửi đến ChatGPT sau một xác nhận cloud riêng; Ollama xử lý trên máy. Khi cửa sổ app thu nhỏ hoặc ẩn, OCR tạm dừng; đóng hẳn app thì thông báo web cũng dừng.
+- OCR chỉ đọc vùng website đang mở sau khi anh cho phép. Ảnh không lưu và không gửi cloud. Lần đầu OCR cần Internet để tải model tiếng Anh từ jsDelivr; model được cache cục bộ, không gửi ảnh hay nội dung nhận diện đến CDN. Chữ OCR chỉ gửi đến ChatGPT sau một xác nhận cloud riêng; Ollama xử lý trên máy. Khi cửa sổ app thu nhỏ hoặc ẩn, OCR tạm dừng; đóng hẳn app thì thông báo web cũng dừng.
 - Token ChatGPT được mã hóa bằng Windows safeStorage. Nội dung chat, mật khẩu và cookie ChatGPT không được ghi vào log hoặc cơ sở dữ liệu app. Chế độ che email/số điện thoại là heuristic và có thể bỏ sót.
 
 ## Kiểm tra và tình trạng
 
 - `npm run typecheck` — đạt.
-- `npm test` — 53 kiểm thử tự động đạt; gồm logic OAuth/refresh/revoke giả lập, định dạng request Responses, AI schema, OCR segmentation và worker browser, đường dẫn tài nguyên OCR dev/bản cài, chính sách notification/shortcut Windows, tách quyền ChatGPT nhập tay và quyền dịch OCR nền, trạng thái thu hồi khi xóa hồ sơ và dữ liệu học.
-- OCR dùng Chromium Web Worker với worker/core được đóng gói cục bộ. Worker/core lấy từ đúng thư mục tài nguyên của bản cài đã nhận dạng đúng ảnh thử tiếng Anh với confidence 95%; đây chưa phải kiểm tra trên tin nhắn WhatsApp/Teams thật.
+- `npm test` — 60 kiểm thử tự động đạt; gồm logic OAuth/refresh/revoke giả lập, định dạng request Responses, AI schema, OCR segmentation, CSP và hồi phục browser worker, đường dẫn tài nguyên OCR dev/bản cài, chính sách notification/shortcut Windows, tách quyền ChatGPT nhập tay và quyền dịch OCR nền, trạng thái thu hồi khi xóa hồ sơ và dữ liệu học.
+- OCR dùng Chromium Web Worker với worker/core được đóng gói cục bộ. Bài smoke test trước đây nhận dạng đúng ảnh tiếng Anh tổng hợp với confidence 95%, nhưng không bao phủ CSP của renderer — đó là lý do có thể dẫn đến lỗi trên app trong ảnh. CSP đã sửa trong bản cài mới; chưa xác nhận lại trên hội thoại thật.
 - Đã cài và khởi chạy bản NSIS x64 từ `C:\Program Files\LinguaHub AI Pro`; hash `app.asar` trùng gói build. Shortcut Start Menu ghi `notification-shortcut-ready`; thử toast trong app trả sự kiện `show` của Electron.
 - Người dùng xác nhận WhatsApp và Teams đã mở/đăng nhập trong app. Em giải mã được hồ sơ SIWC hiện tại, xác nhận quyền `chatgpt.tokens.use.direct` và lấy 8 model thật. Lượt inference kiểm tra bằng câu mẫu đã tới endpoint nhưng bị từ chối bởi hạn mức ChatGPT dùng chung giữa các ứng dụng; chưa có bản dịch hoàn tất để xác nhận kết quả AI thật.
 - Đã sửa request Responses theo hợp đồng hiện hành: `input` là danh sách `{role, content}`. Khi hạn mức được làm mới, có thể thử lại ngay trong app; app không chuyển sang API trả phí.
 - Chưa xác minh tin nhắn thật đi qua dịch OCR hoặc toast WhatsApp/Teams. Nút thử toast chỉ chứng minh thông báo của LinguaHub, không chứng minh website gửi notification thật.
-- Bộ cài Windows được tạo bằng NSIS. OCR Web Worker và core trong tài nguyên bộ cài nhận dạng ảnh mẫu thành công; gỡ cài đặt và OCR trên hội thoại thật vẫn cần xác minh.
+- Bộ cài Windows NSIS x64 mới được tạo thành công; OCR worker/model trên app sau khi sửa CSP, gỡ cài đặt và OCR trên hội thoại thật vẫn cần xác minh.
 - Không tự bật hoặc gọi API trả phí. Không tự động hóa website ChatGPT để lấy câu trả lời.
 
 ## Dành cho phát triển

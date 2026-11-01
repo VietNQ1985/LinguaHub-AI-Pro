@@ -214,7 +214,7 @@ export function LiveTranslation({ model }: { model: string }) {
           }
         }
       } catch (error) {
-        if (!cancelled) { setStatus(error instanceof Error ? error.message : 'OCR gặp lỗi'); nextDelay = 6000 }
+        if (!cancelled) { setStatus(getOcrFailureMessage(error)); nextDelay = 6000 }
       }
       if (!cancelled) timer = setTimeout(tick, nextDelay)
     }
@@ -285,4 +285,15 @@ export function LiveTranslation({ model }: { model: string }) {
 function sourceByIdHasText(sourceById: Map<string, VisibleMessage>, item: VisibleMessage) {
   for (const source of sourceById.values()) if (source.key === item.key) return true
   return false
+}
+
+function getOcrFailureMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : ''
+  if (/network error|failed to fetch|internet disconnected|name not resolved/i.test(message)) {
+    return 'Chưa tải được mô hình nhận diện chữ. Anh kiểm tra kết nối mạng rồi thử lại.'
+  }
+  if (/content security policy|worker|webassembly|script error/i.test(message)) {
+    return 'Không khởi động được bộ nhận diện chữ. Anh cập nhật ứng dụng rồi thử lại.'
+  }
+  return 'Nhận diện chữ gặp lỗi. Anh thử lại sau ít giây.'
 }

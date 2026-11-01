@@ -15,7 +15,7 @@
 - Mã nguồn đã thay sidebar lớn bằng thanh WhatsApp/Teams phía trên và panel dịch tiếng Việt phía phải; quyền riêng tư, dữ liệu và thông báo được đưa vào Cài đặt nâng cao.
 - Khung LiveTranslation luôn được giữ trong React khi thu gọn panel hoặc mở tab Gợi ý trả lời/Cài đặt. Đây là sửa lỗi dừng OCR do unmount ngoài ý muốn, **không** có nghĩa app tiếp tục OCR khi thu nhỏ cửa sổ Windows.
 - Cải tiến nhận diện hai thông điệp có nội dung giống nhau trong một lượt quét bằng thứ tự xuất hiện. Chưa có ID ổn định xuyên cuộn trang; việc ghép tin nhiều dòng và phát hiện đổi cuộc trò chuyện vẫn là heuristic.
-- **Các thay đổi trên nhánh chưa chạy typecheck/unit test/build hoặc thử trên Windows trong phiên sửa qua GitHub.** Không có bộ cài mới được xác minh.
+- `npm run typecheck`, `npm test` (60/60), `npm run build` và `npm run dist` đều đạt trên Windows. Đã sửa CSP sau khi app báo lỗi OCR, nhưng chưa kiểm tra lại OCR trên hội thoại thật bằng installer mới.
 - Chưa có bằng chứng bản dịch tự động chạy tin nhắn thật hoặc SIWC inference thành công trong phiên này. Giữ nguyên giới hạn API và quyền hiện có; không tự sử dụng API trả phí.
 
 
@@ -24,9 +24,9 @@
 ## Đã có bằng chứng
 
 - Người dùng xác nhận đăng nhập WhatsApp và Teams trong app.
-- TypeScript đạt và 53 kiểm thử tự động đạt. Kiểm thử bao phủ schema AI, callback/PKCE, lưu client ID, refresh token, retry thu hồi, định dạng request Responses, stream, quyền notification và cấu hình shortcut Windows, OCR segmentation/browser worker/tài nguyên bản cài, cache, SQLite, xóa dữ liệu/thu hồi, tách quyền ChatGPT nhập tay và quyền dịch OCR nền, từ vựng, tiến độ và retention.
+- TypeScript đạt và 60 kiểm thử tự động đạt. Kiểm thử bao phủ schema AI, callback/PKCE, lưu client ID, refresh token, retry thu hồi, định dạng request Responses, stream, quyền notification và cấu hình shortcut Windows, OCR segmentation/CSP/browser worker/tài nguyên bản cài, cache, SQLite, xóa dữ liệu/thu hồi, tách quyền ChatGPT nhập tay và quyền dịch OCR nền, từ vựng, tiến độ và retention.
 - Hồ sơ SIWC thật giải mã được, có quyền `chatgpt.tokens.use.direct` và trả về 8 model. Lượt inference với câu mẫu đến endpoint nhưng nhận lỗi hạn mức ChatGPT dùng chung giữa các ứng dụng; chưa có inference hoàn tất.
-- Bộ cài NSIS x64 mới đã build; SHA-256 `0bb2c377aca0c9a987d1bbf7268d93be575ee8adf891cd3c7283a25942b32ab7` khớp file `.sha256`. Cài đặt cập nhật vào `C:\Program Files\LinguaHub AI Pro` và khởi chạy bản mới đã xác minh; `app.asar` và OCR worker trong cài đặt trùng hash với gói build. Shortcut Start Menu ghi `notification-shortcut-ready`. Gỡ cài đặt chưa được thử.
+- Bộ cài NSIS x64 vừa build; SHA-256 `e02047072c53eecba7aac74cf8ea8cb413834b3069e39d325eb3e76f3942898b` khớp file `.sha256`. Chưa cài installer này hoặc xác minh OCR sau khi cài. Gỡ cài đặt chưa được thử.
 - Panel trợ lý có thể đổi chiều rộng, thu gọn/mở lại; chiều rộng được lưu cục bộ.
 - Tiến độ học lưu ngày ôn/bài học, thống kê từ đến hạn, chuỗi ngày và lượt AI thành công theo provider; kỳ hạn lưu 30/90/365 ngày có xác nhận trước khi xóa. Thống kê AI không chứa nội dung.
 - English Coach nhận trực tiếp câu OCR qua nút **Học câu này**; phân tích cuộc trò chuyện có gợi ý theo dõi nhưng bắt buộc dẫn chứng khớp văn bản nguồn. Cài đặt có thao tác xóa toàn bộ dữ liệu cục bộ kèm xác nhận, ngắt ChatGPT và xóa phiên web.
@@ -34,7 +34,7 @@
 ## Chưa được chứng minh
 
 - Tự làm mới token/thu hồi thật; hiện mới có kiểm thử với phản hồi HTTP giả lập. Kết nối và model catalog đã được xác minh bằng hồ sơ thật, nhưng inference hoàn tất vẫn chờ hạn mức dùng chung được làm mới. Tài liệu OpenAI nêu điều kiện eligibility cho ChatGPT plan usage; trạng thái quota hiện tại không chứng minh mọi lần dùng sau đều được chấp nhận.
-- Tesseract Chromium Web Worker và core lấy từ tài nguyên bản cài đã nhận dạng đúng ảnh tiếng Anh tổng hợp với confidence 95%. OCR/phân đoạn trên vùng chat thật, cuộn trang và hội thoại mới vẫn cần xác minh.
+- Tesseract worker/core đã được smoke-test với ảnh tiếng Anh tổng hợp, nhưng lần chạy UI thật báo lỗi OCR. Nguyên nhân là CSP thiếu quyền cho worker `blob:`, ảnh `data:`, WASM/tài nguyên cục bộ và model CDN. CSP hiện đã sửa, worker được tạo lại sau lỗi và thông báo mạng dễ hiểu hơn; bản sửa chưa được xác nhận bằng OCR trên hội thoại thật. Lần đầu cần Internet để tải model từ jsDelivr; ảnh và nội dung OCR không gửi đến CDN.
 - Hồ sơ app có quyền notification cho WhatsApp và Teams (`true`). Nút thử trong app đã phát sự kiện Electron `show`, và giao diện báo Windows đã nhận yêu cầu toast. Thông báo do WhatsApp/Teams phát khi có tin mới vẫn chưa được xác minh; còn phụ thuộc cài đặt Desktop notification trong từng dịch vụ.
 
 ## Chưa hoàn thiện

@@ -61,7 +61,7 @@ test('clearAll removes local learning data, activity, and saved preferences',asy
     expect(store.list()).toEqual([])
     expect(store.getLearningProgress()).toMatchObject({totalWords:0,reviewsToday:0,lessonsToday:0})
     expect(store.getNotificationPreferences()).toEqual({whatsapp:false,teams:false})
-    expect(store.getPreferences()).toEqual({theme:'dark',model:'',panelWidth:360})
+    expect(store.getPreferences()).toEqual({theme:'light',model:'',panelWidth:360})
     expect(store.getRetentionDays()).toBe(0)
   }finally{await rm(directory,{recursive:true,force:true})}
 })
