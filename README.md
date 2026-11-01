@@ -1,25 +1,31 @@
 # LinguaHub AI Pro
 
-Ứng dụng Windows gom WhatsApp Web và Microsoft Teams Web vào một cửa sổ, kèm dịch OCR cục bộ, trợ lý viết tiếng Anh và công cụ học từ vựng. Nội dung chat không tự lưu vào cơ sở dữ liệu học; app không tự gửi tin nhắn.
+LinguaHub là ứng dụng Windows hiển thị WhatsApp Web hoặc Microsoft Teams Web thật, với **khung bản dịch tiếng Việt bên cạnh**. Giao diện LinguaHub ưu tiên tiếng Việt, tối giản và dễ đọc. Ứng dụng không tự gửi tin nhắn.
 
-## Mở ứng dụng
+## Giao diện tinh gọn (nhánh cải tiến)
 
-Chạy `release/LinguaHub-AI-Pro-Setup.exe`, chọn thư mục cài và mở **LinguaHub AI Pro** từ Start hoặc shortcut Desktop. Đăng nhập WhatsApp/Teams ngay trên website chính thức trong app. Hai phiên đăng nhập được tách riêng và giữ khi chuyển dịch vụ.
+- Thanh trên cùng chỉ có **WhatsApp**, **Microsoft Teams**, nút tải lại, **Cài đặt** và nút thu gọn bản dịch.
+- Bên trái hiển thị website chính thức; bên phải là **Dịch tự động** và **Gợi ý trả lời**.
+- Khi thu gọn khung dịch, component nhận diện và dịch không còn bị tháo khỏi React; người dùng vẫn có thể tạm dừng dịch bằng nút **Tạm dừng**.
+- Những tính năng phụ không còn chiếm diện tích màn hình. Quản lý thông báo, thời hạn giữ dữ liệu và xóa dữ liệu cục bộ nằm trong **Cài đặt nâng cao**.
+- Giao diện tiếng Việt mặc định dùng chế độ sáng cho hồ sơ mới; hồ sơ cũ giữ tùy chọn đã lưu.
 
-Nếu đang mở bản `release/win-unpacked`, thoát hẳn LinguaHub rồi chạy bộ cài để cập nhật. Sau cài đặt, mở app từ Start Menu để Windows dùng shortcut đã đăng ký cho toast.
+**Lưu ý:** Đây là mã nguồn trên nhánh cải tiến. Bộ cài release/ trong tài liệu cũ có thể vẫn là phiên bản trước; bản cải tiến chưa được build/kiểm thử trên Windows qua phiên làm việc này.
 
-SHA-256 của bộ cài hiện tại: `0bb2c377aca0c9a987d1bbf7268d93be575ee8adf891cd3c7283a25942b32ab7`.
+## Sử dụng hằng ngày
 
-Mã nguồn có thể chạy bằng `Mo-LinguaHub.cmd` khi máy đã cài Node.js và dependencies. Đây là cách dành cho phát triển.
+1. Mở LinguaHub, app sẽ mở **WhatsApp**. Chọn **Microsoft Teams** trên thanh trên cùng khi muốn chuyển dịch vụ. Mỗi website có phiên đăng nhập riêng.
+2. Nhấn biểu tượng **Cài đặt** (⚙), đăng nhập ChatGPT, sau đó nhấn **Chọn ChatGPT** để lấy mô hình được tài khoản cấp quyền; hoặc nhấn **Chọn Ollama** nếu đã cài Ollama và mô hình chạy cục bộ.
+3. Quay lại **Dịch tự động**, nhấn **Bật dịch** và xác nhận quyền đọc vùng chat hiển thị. Nếu dùng ChatGPT, ứng dụng hỏi riêng trước khi gửi văn bản được nhận diện lên cloud.
+4. Mở cuộc trò chuyện cần đọc; bản dịch sẽ được hiển thị bên phải khi hệ thống nhận diện và AI xử lý thành công. Nút **Tạm dừng** sẽ ngừng nhận diện.
+5. Để chỉnh vùng nhận diện, tạm dừng dịch rồi mở **Tùy chỉnh vùng nhận diện** ở cuối khung dịch.
+6. Khi cần soạn tin, chọn **Gợi ý trả lời**, nhập tiếng Việt và yêu cầu AI tạo câu tiếng Anh. Anh tự xem, sao chép và gửi trên website thật.
 
-## Sử dụng
+Lối tắt: Ctrl+1 WhatsApp, Ctrl+2 Teams, Ctrl+R tải lại trang. Ctrl+0 hiện chuyển về WhatsApp để tương thích với phím tắt cũ.
 
-- **Tổng quan** ẩn vùng chat mà vẫn giữ các phiên đăng nhập. Phím tắt: `Ctrl+0` Tổng quan, `Ctrl+1` WhatsApp, `Ctrl+2` Teams, `Ctrl+R` tải lại dịch vụ đang mở.
+## Mức độ kiểm chứng
 
-1. Mở **Cài đặt** ở thanh bên, chọn Ollama nếu muốn xử lý trên máy; cài Ollama và tải model trước. Bấm **Kết nối Ollama** rồi chọn model.
-2. Để dùng ChatGPT, mở **Tài khoản ChatGPT** → **Continue with ChatGPT**. Đăng nhập trong trình duyệt OpenAI và xem kỹ quyền sử dụng gói. Sau đó bấm **Dùng model ChatGPT**. App có nút mở **Hạn mức và mức sử dụng ChatGPT**; hạn mức 5 giờ của Plus được chia sẻ với các app khác.
-3. Nhập nội dung để dịch, tạo ba phương án trả lời (đơn giản, chuyên nghiệp, thân thiện), dùng English Coach, tóm tắt hoặc rà soát rủi ro. Mỗi câu trả lời có nghĩa tiếng Việt, sao chép, nghe giọng US/UK và giải thích. Anh tự duyệt rồi gửi; app không tự gửi.
-4. Tự dịch tin đang hiển thị: mở cuộc trò chuyện, chỉnh thanh vùng OCR để bỏ danh sách liên hệ, bấm **Cho phép và bật OCR** và xác nhận. Chọn Ollama để giữ phần dịch trên máy; nếu chọn ChatGPT, xác nhận thêm quyền riêng để gửi chữ OCR đến OpenAI. Ảnh luôn xử lý cục bộ, không tải lên. OCR chờ nội dung ổn định qua hai lần đọc; tin nhận dạng dưới 65% không gửi đi dịch. Bấm **Dừng OCR** để dừng gửi và ngừng theo dõi. Nút **Học câu này** đưa câu OCR đã xác nhận sang English Coach.
+Đã cập nhật source code giao diện, bổ sung phân biệt tin nhắn trùng nội dung trong cùng lượt OCR và thêm kiểm thử đơn vị cho logic này. **Chưa chạy typecheck, unit test, build Windows hay thử nhận diện thực tế sau những thay đổi trên nhánh**. Kết quả kiểm thử bản cũ bên dưới không chứng minh bản cải tiến đã đạt.
 
 ## Học và quyền riêng tư
 
