@@ -12,7 +12,9 @@ export function LiveTranslation({ model }: { model: string }) {
   const [backgroundCloudAccess, setBackgroundCloudAccess] = useState<{ model: string; allowed: boolean } | null>(null)
   const [status, setStatus] = useState('Đang tắt đọc tin nhắn')
   const [messages, setMessages] = useState<VisibleMessage[]>([])
-  const cache = useRef(new TranslationCache<TranslationValue>())
+  // Keep enough recent entries for multiple visible conversations while the
+  // user switches between WhatsApp and Teams.
+  const cache = useRef(new TranslationCache<TranslationValue>(120))
   const workspaceVersion = useRef(0)
   const conversationVersion = useRef(0)
   const conversationId = useRef<string | null>(null)
@@ -56,7 +58,8 @@ export function LiveTranslation({ model }: { model: string }) {
       conversationId.current = null
       latestSnapshot.current = null
       failed.current.clear()
-      cache.current.clear()
+      // Switching workspace should clear the displayed snapshot, not discard
+      // translations already cached for messages the user may return to.
       cancelBatch()
       setMessages([])
       setStatus('Đã đổi dịch vụ, chờ khung chat mới')
