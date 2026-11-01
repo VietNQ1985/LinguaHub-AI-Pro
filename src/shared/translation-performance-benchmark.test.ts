@@ -8,7 +8,7 @@ import { TranslationCache } from './translation-cache'
 
 type Message = { text: string; id?: string }
 type Scenario = { name: string; messages: Message[]; service: 'whatsapp' | 'teams'; switchChat?: boolean; cancelStale?: boolean }
-type Timing = { detect:number; confirm:number; queue:number; ai:number; ui:number; total:number; drain:number; requests:number; cancelled:number; scrollRequests:number }
+type Timing = { detect:number; confirm:number; queue:number; ai:number; ui:number; total:number; drain:number; requests:number; cancelled:number; scrollRequests:number; firstBatchMessages:number; firstBatchIsNewest:boolean }
 
 // Worst-case waits reconstructed from the prior implementation's adaptive polling policy.
 // Stable web message IDs were not used before the optimization, so every new item needed a second scan.
@@ -33,18 +33,52 @@ test('benchmarks visible translation stages against the prior polling policy',as
   const measured: Array<{name:string;timing:Timing}> = []
   for(const scenario of scenarios){
     const samples:Timing[]=[]
-    for(let repetition=0;repetition<3;repetition++)samples.push(await benchmarkScenario(scenario))
+    for(let repetition=0;repetition<5;repetition++)samples.push(await benchmarkScenario(scenario))
     measured.push({name:scenario.name,timing:medianTiming(samples)})
   }
   const report=scenarios.map(scenario=>({name:scenario.name,before:oldWorstCase[scenario.name],after:measured.find(item=>item.name===scenario.name)!.timing}))
-  console.info('BENCHMARK_LIVE_TRANSLATION '+JSON.stringify(report))
+  console.info('BENCHMARK_VISIBLE_TRANSLATION_HARNESS '+JSON.stringify(report))
   expect(measured).toHaveLength(5)
   expect(measured.every(item=>item.timing.detect<FALLBACK_TRANSLATION_SCAN_MS)).toBe(true)
   expect(measured.find(item=>item.name==='Tin dài')?.timing.confirm).toBeGreaterThanOrEqual(IDLESS_MESSAGE_CONFIRMATION_MS)
   expect(Number.isFinite(measured.find(item=>item.name==='Chat liên tục')?.timing.queue)).toBe(true)
-  expect(measured.find(item=>item.name==='Chat liên tục')?.timing.requests).toBe(3)
+  expect(measured.find(item=>item.name==='Chat liên tục')?.timing.requests).toBe(5)
+  expect(measured.every(item=>item.timing.firstBatchMessages===1&&item.timing.firstBatchIsNewest)).toBe(true)
   expect(measured.find(item=>item.name==='Chuyển hội thoại')?.timing.cancelled).toBe(1)
   expect(measured.find(item=>item.name==='Cuộn lên xuống')?.timing.scrollRequests).toBe(0)
+},30000)
+
+test('benchmarks AI response latency for 1, 2, 4 and 8 messages with five repetitions',async()=>{
+  type Sample={request:number;firstResponse:number;completion:number;uiUpdate:number;total:number}
+  const report:Array<{count:number;repetitions:number;median:Sample;p95:Sample}> = []
+  for(const count of [1,2,4,8]){
+    const samples:Sample[] = []
+    for(let repetition=0;repetition<5;repetition++){
+      const messages=Array.from({length:count},(_,index)=>({id:`m${index}`,text:`Please confirm purchase order ${index+1}.`}))
+      const timing:{requestMs?:number;firstResponseMs?:number|null;completionMs?:number}={}
+      const started=performance.now()
+      await runLocalAi('translateMessages',JSON.stringify({messages}),'synthetic-benchmark',async(_model,input,_instructions,_signal,onTiming)=>{
+        const providerStarted=performance.now()
+        await mockLatency(1)
+        onTiming?.({requestMs:performance.now()-providerStarted})
+        await mockLatency(8)
+        onTiming?.({firstResponseMs:performance.now()-providerStarted})
+        await mockLatency(12+count*3)
+        onTiming?.({completionMs:performance.now()-providerStarted})
+        const request=JSON.parse(input) as {messages:Array<{id:string;text:string}>}
+        return JSON.stringify({translations:request.messages.map(message=>({id:message.id,translation:`Vui lòng xác nhận đơn mua hàng ${message.id}.`}))})
+      },undefined,update=>Object.assign(timing,update))
+      const responseAt=performance.now()
+      await mockLatency(1)
+      samples.push({request:timing.requestMs||0,firstResponse:timing.firstResponseMs||0,completion:timing.completionMs||0,uiUpdate:performance.now()-responseAt,total:performance.now()-started})
+    }
+    const measure=(key:keyof Sample,fraction:number)=>percentile(samples.map(sample=>sample[key]),fraction)
+    const summary=(fraction:number):Sample=>({request:measure('request',fraction),firstResponse:measure('firstResponse',fraction),completion:measure('completion',fraction),uiUpdate:measure('uiUpdate',fraction),total:measure('total',fraction)})
+    report.push({count,repetitions:samples.length,median:summary(0.5),p95:summary(0.95)})
+  }
+  console.info('BENCHMARK_SYNTHETIC_PROVIDER_TRANSLATION_BATCH '+JSON.stringify(report))
+  expect(report.map(item=>item.count)).toEqual([1,2,4,8])
+  expect(report.every(item=>item.repetitions>=5&&item.p95.completion>=item.median.completion&&item.p95.firstResponse>=item.median.firstResponse&&item.p95.uiUpdate>=item.median.uiUpdate)).toBe(true)
 },30000)
 
 async function benchmarkScenario(scenario:Scenario):Promise<Timing>{
@@ -116,16 +150,19 @@ async function benchmarkScenario(scenario:Scenario):Promise<Timing>{
     confirm=Date.now()-firstReadAt
   }
   const readyAt=Date.now()
-  if(busyRequest)await busyRequest
   const pendingMessages=snapshot.messages.filter(message=>cache.get(model,message.text,Date.now(),translationCacheScope(conversation,message.id))===undefined)
   const ordered=newestFirst(pendingMessages,MAX_TRANSLATION_BATCH_MESSAGES*10)
   const batches:Array<Message[]>=[]
-  for(let index=0;index<ordered.length;index+=MAX_TRANSLATION_BATCH_MESSAGES) batches.push(ordered.slice(index,index+MAX_TRANSLATION_BATCH_MESSAGES))
+  if(ordered.length)batches.push(ordered.slice(0,1))
+  for(let index=1;index<ordered.length;index+=MAX_TRANSLATION_BATCH_MESSAGES) batches.push(ordered.slice(index,index+MAX_TRANSLATION_BATCH_MESSAGES))
   let firstVisibleAt=0
+  let firstBatchMessages=0
+  let firstBatchIsNewest=false
   for(const batch of batches){
     const startedAt=Date.now()
     if(!firstVisibleAt)queue=Math.max(0,startedAt-readyAt)
     const requestMessages=batch.map((message,index)=>({id:`m${index}`,text:message.text.slice(0,4000)}))
+    if(firstBatchMessages===0){firstBatchMessages=requestMessages.length;firstBatchIsNewest=batch[0]===snapshot.messages.at(-1)}
     const response=await runMessages(requestMessages)
     const responseAt=Date.now()
     if(!firstVisibleAt)ai=responseAt-startedAt
@@ -147,6 +184,7 @@ async function benchmarkScenario(scenario:Scenario):Promise<Timing>{
       firstVisibleAt=Date.now()
     }
   }
+  if(busyRequest)await busyRequest
   drain=Date.now()-readyAt
   const total=firstVisibleAt?firstVisibleAt-mutationAt:Date.now()-mutationAt
 
@@ -163,7 +201,7 @@ async function benchmarkScenario(scenario:Scenario):Promise<Timing>{
   }
   stop()
   dom.window.close()
-  return {detect,confirm,queue,ai,ui,total,drain,requests,cancelled,scrollRequests}
+  return {detect,confirm,queue,ai,ui,total,drain,requests,cancelled,scrollRequests,firstBatchMessages,firstBatchIsNewest}
 }
 
 function mockLatency(duration:number,signal?:AbortSignal){
@@ -188,7 +226,14 @@ function medianTiming(samples:Timing[]):Timing{
     requests:median(samples.map(item=>item.requests)),
     cancelled:median(samples.map(item=>item.cancelled)),
     scrollRequests:median(samples.map(item=>item.scrollRequests)),
+    firstBatchMessages:median(samples.map(item=>item.firstBatchMessages)),
+    firstBatchIsNewest:samples.every(item=>item.firstBatchIsNewest),
   }
+}
+
+function percentile(values:number[],fraction:number){
+  const sorted=[...values].sort((left,right)=>left-right)
+  return sorted[Math.max(0,Math.ceil(sorted.length*fraction)-1)]
 }
 
 function waitUntil(predicate:()=>boolean,timeoutMs:number){

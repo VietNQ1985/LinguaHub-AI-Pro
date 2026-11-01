@@ -69,6 +69,7 @@ app.whenReady().then(async () => {
   await chatgpt.initialize()
   const learning = await createLearningStore(app.getPath('userData'), app.isPackaged ? join(process.resourcesPath, 'sql-wasm.wasm') : join(app.getAppPath(), 'node_modules/sql.js/dist/sql-wasm.wasm'))
   workspacePanelWidth=learning.getPreferences().panelWidth
+  if(learning.getPreferences().model.startsWith('chatgpt:')&&chatgpt.status().usageEnabled)void chatgpt.listModels().catch(()=>{})
   const notificationPermissions = await learning.getNotificationPreferences()
   const notificationPrompts = new Map<WorkspaceService, Promise<boolean>>()
   const chatMutationDebounces = new Map<ChatService, {timer:ReturnType<typeof setTimeout>;contents:Electron.WebContents;observedAt:number}>()
@@ -283,11 +284,13 @@ app.whenReady().then(async () => {
     if(id && aiRequests.has(id))throw new Error('Mã yêu cầu AI đang được dùng.')
     if(id)aiRequests.set(id,controller)
     try {
+      const timing={requestMs:0,firstResponseMs:null as number|null,completionMs:0}
+      const onTiming=(update:Partial<typeof timing>)=>Object.assign(timing,update)
       const result=model.startsWith('chatgpt:')
-        ? await runLocalAi(task,text,model.slice(8),(provider,input,instructions,signal)=>chatgpt.respond(provider,input,instructions,signal,reasoningEffort),controller.signal)
-        : await runLocalAi(task,text,model,undefined,controller.signal)
+        ? await runLocalAi(task,text,model.slice(8),(provider,input,instructions,signal,onResponseTiming)=>chatgpt.respond(provider,input,instructions,signal,reasoningEffort,onResponseTiming),controller.signal,onTiming)
+        : await runLocalAi(task,text,model,undefined,controller.signal,onTiming)
       await learning.recordAiUsage(model.startsWith('chatgpt:')?'chatgpt':'ollama',task).catch(()=>{})
-      return result
+      return task==='translateMessages'?{result,timing}:result
     } finally { if(id)aiRequests.delete(id) }
   })
   ipcMain.handle('ai:cancel',(event,requestId:unknown)=>{

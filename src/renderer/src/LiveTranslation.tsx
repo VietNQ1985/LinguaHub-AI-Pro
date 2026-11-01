@@ -1,14 +1,16 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { TranslationCache } from '../../shared/translation-cache'
 import { messageIdentityKeys } from '../../shared/message-identity'
-import { FALLBACK_TRANSLATION_SCAN_MS, IDLESS_MESSAGE_CONFIRMATION_MS, MAX_TRANSLATION_BATCH_MESSAGES, newestFirst, translationCacheScope } from '../../shared/translation-policy'
+import { FALLBACK_TRANSLATION_SCAN_MS, IDLESS_MESSAGE_CONFIRMATION_MS, nextTranslationBatch, translationCacheScope } from '../../shared/translation-policy'
+import type { AiResponseTiming } from '../../shared/ai-timing'
 
 type MessageStatus = 'confirming' | 'waiting-model' | 'waiting-consent' | 'translating' | 'translated' | 'not-english' | 'needs-review' | 'failed'
 type TranslationValue = { translation: string; explanation: string }
 type VisibleMessage = { key: string; id?: string; text: string; side: 'left' | 'right' | 'center'; status: MessageStatus; value?: TranslationValue; timing?: { detectedMs: number; confirmationMs: number; readyAt: number; source: 'event' | 'poll' | 'initial' } }
-type TranslationBatch = { translations: Array<{ id: string; translation: string; explanation: string }> }
+type TranslationBatch = { translations: Array<{ id: string; translation: string; explanation?: string }> }
+type TranslationRun = { result: TranslationBatch; timing: AiResponseTiming }
 type ScanTrigger = { source: 'event' | 'poll' | 'initial' | 'confirmation' | 'completion' | 'retry'; observedAt?: number }
-type TimingSample = { detectedMs: number; confirmationMs: number; aiWaitMs: number; aiProcessMs: number; uiUpdateMs: number; source: 'event' | 'poll' | 'initial'; messageCount: number; responseAt: number }
+type TimingSample = { detectedMs: number; confirmationMs: number; aiWaitMs: number; requestMs: number; firstResponseMs: number | null; completionMs: number; aiProcessMs: number; uiUpdateMs: number; source: 'event' | 'poll' | 'initial'; messageCount: number; responseAt: number }
 type ChatSnapshot = { conversationId: string; text: string; messages: Array<{ text: string; side: 'left' | 'right' | 'center'; id?: string }> }
 
 export function LiveTranslation({ model }: { model: string }) {
@@ -21,10 +23,11 @@ export function LiveTranslation({ model }: { model: string }) {
   const workspaceVersion = useRef(0)
   const conversationVersion = useRef(0)
   const conversationId = useRef<string | null>(null)
-  const currentBatch = useRef<string | null>(null)
+  const currentBatches = useRef(new Map<'priority' | 'backlog', string>())
+  const inFlightMessageKeys = useRef(new Set<string>())
   const failed = useRef(new Set<string>())
   const latestSnapshot = useRef<{ version: number; messages: VisibleMessage[] } | null>(null)
-  const pendingUiTiming = useRef<Omit<TimingSample, 'uiUpdateMs'> | null>(null)
+  const pendingUiTimings = useRef<Array<Omit<TimingSample, 'uiUpdateMs'>>>([])
   const activeModel = model.startsWith('chatgpt:')
     ? backgroundCloudAccess?.model === model && backgroundCloudAccess.allowed ? model : ''
     : model
@@ -50,9 +53,11 @@ export function LiveTranslation({ model }: { model: string }) {
   }, [enabled, model, backgroundCloudAccess?.model])
 
   const cancelBatch = () => {
-    const id = currentBatch.current
-    currentBatch.current = null
-    if (id) void window.lingua.cancelAi(id).catch(() => {})
+    const ids = [...currentBatches.current.values()]
+    currentBatches.current.clear()
+    inFlightMessageKeys.current.clear()
+    pendingUiTimings.current = []
+    for (const id of ids) void window.lingua.cancelAi(id).catch(() => {})
   }
 
   useEffect(() => {
@@ -67,6 +72,9 @@ export function LiveTranslation({ model }: { model: string }) {
     let lastScanCompletedAt = 0
     let lastSnapshotSignature = ''
     let latestObservedAt: number | undefined
+    const knownMessageKeys = new Set<string>()
+    let newestPriorityKey: string | null = null
+    let initialPriorityPending=true
     const observations = new Map<string, { firstSeenAt: number; detectedMs: number; source: 'event' | 'poll' | 'initial' }>()
 
     const cacheScope = (item: Pick<VisibleMessage, 'id' | 'key'>) => translationCacheScope(conversationId.current || '', item.id)
@@ -90,16 +98,34 @@ export function LiveTranslation({ model }: { model: string }) {
       }, Math.max(0, delay))
     }
 
-    const translatePending = (items: VisibleMessage[], version: number) => {
-      if (cancelled || currentBatch.current || !activeModel) return
-      // The newest confirmed bubble is sent first; a small batch bounds the
-      // first visible result while keeping old visible messages in the queue.
-      const pending = newestFirst(items.filter(item => item.status === 'translating'), MAX_TRANSLATION_BATCH_MESSAGES)
+    function translatePending(items: VisibleMessage[], version: number) {
+      if (cancelled || !activeModel) return
+      const pending = items.filter(item => item.status === 'translating' && !inFlightMessageKeys.current.has(item.key))
       if (!pending.length) return
+      const priorityKey = newestPriorityKey
+      const next = nextTranslationBatch(pending, priorityKey, item => item.key, initialPriorityPending)
+      if (!next) return
+      const selectedKey = next.messages[0].key
+      const isNewPriority = priorityKey !== null && selectedKey === priorityKey
+      if (priorityKey && !isNewPriority && next.lane !== 'priority') newestPriorityKey = null
+      if (next.lane === 'priority') {
+        if (currentBatches.current.has('priority')) return
+        if (isNewPriority) newestPriorityKey = null
+        initialPriorityPending = false
+        launchTranslation(next.messages, version, 'priority')
+        return
+      }
+      // Keep older work behind the first priority result. Once it starts, a
+      // newly arrived message can use the free priority lane immediately.
+      if (currentBatches.current.has('priority') || currentBatches.current.has('backlog')) return
+      launchTranslation(next.messages, version, 'backlog')
+    }
 
+    function launchTranslation(selected: VisibleMessage[], version: number, lane: 'priority' | 'backlog') {
+      if (cancelled || !activeModel || !selected.length || currentBatches.current.has(lane)) return
       const requestMessages: Array<{ id: string; text: string }> = []
       const sourceById = new Map<string, VisibleMessage>()
-      for (const item of pending) {
+      for (const item of selected) {
         const id = `m${requestMessages.length}`
         const candidate = [...requestMessages, { id, text: item.text.slice(0, 4000) }]
         if (JSON.stringify({ messages: candidate }).length > 11000) break
@@ -110,39 +136,44 @@ export function LiveTranslation({ model }: { model: string }) {
       const requestId = crypto.randomUUID()
       const requestStartedAt = Date.now()
       const primary = sourceById.get('m0')!
-      currentBatch.current = requestId
+      currentBatches.current.set(lane, requestId)
+      for (const item of sourceById.values()) inFlightMessageKeys.current.add(item.key)
       setStatus(`Đang dịch ${requestMessages.length} tin nhắn…`)
       void window.lingua.runAi('translateMessages', JSON.stringify({ messages: requestMessages }), activeModel, requestId)
         .then(value => {
-          if (cancelled || currentBatch.current !== requestId || version !== conversationVersion.current) return
-          const result = value as TranslationBatch
+          if (cancelled || currentBatches.current.get(lane) !== requestId || version !== conversationVersion.current) return
+          const run = value as TranslationRun
+          const result = run?.result
           if (!result || !Array.isArray(result.translations)) throw new Error('Kết quả dịch theo từng tin không hợp lệ.')
           const values = new Map<string, TranslationValue>()
           for (const item of result.translations) {
             const source = sourceById.get(item.id)
-            if (!source || typeof item.translation !== 'string' || typeof item.explanation !== 'string') throw new Error('Kết quả dịch không khớp tin nhắn gốc.')
-            const translated = { translation: item.translation, explanation: item.explanation }
+            if (!source || typeof item.translation !== 'string' || (item.explanation !== undefined && typeof item.explanation !== 'string')) throw new Error('Kết quả dịch không khớp tin nhắn gốc.')
+            const translated = { translation: item.translation, explanation: item.explanation || '' }
             values.set(source.key, translated)
             cache.current.set(activeModel, source.text, translated, Date.now(), cacheScope(source))
           }
           if (values.size !== sourceById.size) throw new Error('AI không trả đủ bản dịch cho các tin mới.')
           const responseAt = Date.now()
-          pendingUiTiming.current = {
+          pendingUiTimings.current.push({
             detectedMs: primary.timing?.detectedMs ?? 0,
             confirmationMs: primary.timing?.confirmationMs ?? 0,
             aiWaitMs: Math.max(0, requestStartedAt - (primary.timing?.readyAt ?? requestStartedAt)),
+            requestMs: run.timing?.requestMs ?? 0,
+            firstResponseMs: run.timing?.firstResponseMs ?? null,
+            completionMs: run.timing?.completionMs ?? 0,
             aiProcessMs: Math.max(0, responseAt - requestStartedAt),
             source: primary.timing?.source ?? 'poll',
             messageCount: values.size,
             responseAt,
-          }
+          })
           const updated = itemsWithTranslations(latestSnapshot.current?.messages || [], values)
           latestSnapshot.current = { version, messages: updated }
           commitMessages(updated)
           setStatus('Đang theo dõi tin nhắn hiển thị')
         })
         .catch(error => {
-          if (cancelled || currentBatch.current !== requestId || version !== conversationVersion.current) return
+          if (cancelled || currentBatches.current.get(lane) !== requestId || version !== conversationVersion.current) return
           for (const source of sourceById.values()) failed.current.add(failureKey(source))
           const updated = (latestSnapshot.current?.messages || []).map(item => sourceByIdHasItem(sourceById, item) ? { ...item, status: 'failed' as const } : item)
           latestSnapshot.current = { version, messages: updated }
@@ -150,8 +181,9 @@ export function LiveTranslation({ model }: { model: string }) {
           setStatus(error instanceof Error ? `Dịch chưa thành công: ${error.message}` : 'Dịch chưa thành công.')
         })
         .finally(() => {
-          if (currentBatch.current !== requestId) return
-          currentBatch.current = null
+          if (currentBatches.current.get(lane) !== requestId) return
+          currentBatches.current.delete(lane)
+          for (const item of sourceById.values()) inFlightMessageKeys.current.delete(item.key)
           const latest = latestSnapshot.current
           if (latest && latest.version === conversationVersion.current) {
             const refreshed = latest.messages.map(item => {
@@ -194,6 +226,9 @@ export function LiveTranslation({ model }: { model: string }) {
           cancelBatch()
           failed.current.clear()
           observations.clear()
+          knownMessageKeys.clear()
+          newestPriorityKey=null
+          initialPriorityPending=true
           lastSnapshotSignature = ''
           latestSnapshot.current = null
           commitMessages([])
@@ -235,6 +270,13 @@ export function LiveTranslation({ model }: { model: string }) {
           }
           return { ...candidate, status: 'confirming' }
         })
+        const isFirstSnapshot=knownMessageKeys.size===0
+        const newKeys=keys.filter(key=>!knownMessageKeys.has(key))
+        for(const key of keys)knownMessageKeys.add(key)
+        if(isFirstSnapshot||newKeys.length){
+          const candidates=visible.filter(item=>item.status==='translating'&&(isFirstSnapshot||newKeys.includes(item.key)))
+          newestPriorityKey=candidates.at(-1)?.key||newestPriorityKey
+        }
         lastSnapshotSignature = signature
         latestSnapshot.current = { version: currentVersion, messages: visible }
         commitMessages(visible)
@@ -242,7 +284,7 @@ export function LiveTranslation({ model }: { model: string }) {
         else if (!activeModel) setStatus(model.startsWith('chatgpt:') ? 'Cần cho phép gửi chữ tin nhắn hiển thị đến ChatGPT để tự dịch' : 'Đã đọc tin nhắn. Chọn ChatGPT hoặc kết nối Ollama để tự dịch')
         else {
           if (visible.some(item => item.status === 'confirming')) setStatus('Đang kiểm tra tin mới…')
-          else if (!currentBatch.current) setStatus('Đang theo dõi tin nhắn hiển thị')
+          else if (!currentBatches.current.size) setStatus('Đang theo dõi tin nhắn hiển thị')
           translatePending(visible, currentVersion)
         }
         if (nextConfirmDelay !== Number.POSITIVE_INFINITY) scheduleScan(Math.max(0, nextConfirmDelay), { source: 'confirmation' })
@@ -276,6 +318,9 @@ export function LiveTranslation({ model }: { model: string }) {
       conversationId.current = null
       latestSnapshot.current = null
       lastSnapshotSignature = ''
+      knownMessageKeys.clear()
+      newestPriorityKey=null
+      initialPriorityPending=true
       observations.clear()
       failed.current.clear()
       cancelBatch()
@@ -289,6 +334,9 @@ export function LiveTranslation({ model }: { model: string }) {
       conversationId.current = null
       latestSnapshot.current = null
       lastSnapshotSignature = ''
+      knownMessageKeys.clear()
+      newestPriorityKey=null
+      initialPriorityPending=true
       observations.clear()
       failed.current.clear()
       cache.current.clear()
@@ -321,10 +369,9 @@ export function LiveTranslation({ model }: { model: string }) {
   }, [enabled, activeModel, model])
 
   useLayoutEffect(() => {
-    const pending = pendingUiTiming.current
-    if (!pending) return
-    pendingUiTiming.current = null
-    setTimings(current => [...current, { ...pending, uiUpdateMs: Math.max(0, Date.now() - pending.responseAt) }].slice(-40))
+    const pending = pendingUiTimings.current.splice(0)
+    if (!pending.length) return
+    setTimings(current => [...current, ...pending.map(sample => ({ ...sample, uiUpdateMs: Math.max(0, Date.now() - sample.responseAt) }))].slice(-40))
   }, [messages])
 
   useEffect(() => () => { void window.lingua.stopVisibleChatRead() }, [])
@@ -390,7 +437,9 @@ export function LiveTranslation({ model }: { model: string }) {
         <summary>Chẩn đoán tốc độ ({timings.length} mẫu)</summary>
         {lastTiming ? <>
           <p>Tin mới nhất: phát hiện {formatMs(lastTiming.detectedMs)}; xác nhận {formatMs(lastTiming.confirmationMs)}; chờ hàng đợi AI {formatMs(lastTiming.aiWaitMs)}; AI xử lý và trả kết quả {formatMs(lastTiming.aiProcessMs)}; cập nhật giao diện {formatMs(lastTiming.uiUpdateMs)}.</p>
-          <p>Trung vị {timings.length} mẫu: phát hiện {formatMs(median(timings.map(item => item.detectedMs)))}; xác nhận {formatMs(median(timings.map(item => item.confirmationMs)))}; chờ AI {formatMs(median(timings.map(item => item.aiWaitMs)))}; xử lý AI {formatMs(median(timings.map(item => item.aiProcessMs)))}; giao diện {formatMs(median(timings.map(item => item.uiUpdateMs)))}.</p>
+          <p>AI: gửi đến HTTP header {formatMs(lastTiming.requestMs)}; token phản hồi đầu {formatMs(lastTiming.firstResponseMs ?? 0)}; hoàn tất luồng {formatMs(lastTiming.completionMs)}.</p>
+          <p>Trung vị {timings.length} mẫu: phát hiện {formatMs(median(timings.map(item => item.detectedMs)))}; xác nhận {formatMs(median(timings.map(item => item.confirmationMs)))}; chờ AI {formatMs(median(timings.map(item => item.aiWaitMs)))}; gửi/header {formatMs(median(timings.map(item => item.requestMs)))}; phản hồi đầu {formatMs(median(timings.flatMap(item => item.firstResponseMs===null?[]:[item.firstResponseMs])))}; hoàn tất luồng {formatMs(median(timings.map(item => item.completionMs)))}; tổng AI {formatMs(median(timings.map(item => item.aiProcessMs)))}; giao diện {formatMs(median(timings.map(item => item.uiUpdateMs)))}.</p>
+          <p>P95 {timings.length} mẫu: phản hồi đầu {formatMs(percentile(timings.flatMap(item => item.firstResponseMs===null?[]:[item.firstResponseMs]),0.95))}; hoàn tất luồng {formatMs(percentile(timings.map(item=>item.completionMs),0.95))}; cập nhật giao diện {formatMs(percentile(timings.map(item=>item.uiUpdateMs),0.95))}.</p>
           <p>Nguồn phát hiện gần nhất: {lastTiming.source === 'event' ? 'sự kiện DOM' : lastTiming.source === 'initial' ? 'mở chat' : 'quét dự phòng'}; một yêu cầu gồm {lastTiming.messageCount} tin.</p>
         </> : <p>Chưa có bản dịch hoàn tất để đo.</p>}
       </details>
@@ -427,6 +476,12 @@ function median(values: number[]) {
   if (!values.length) return 0
   const sorted = [...values].sort((left, right) => left - right)
   return sorted[Math.floor(sorted.length / 2)]
+}
+
+function percentile(values:number[],fraction:number){
+  if(!values.length)return 0
+  const sorted=[...values].sort((left,right)=>left-right)
+  return sorted[Math.max(0,Math.ceil(sorted.length*fraction)-1)]
 }
 
 function formatMs(value: number) {

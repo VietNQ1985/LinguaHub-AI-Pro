@@ -45,6 +45,7 @@ test('sends Responses API input as a user content list',async()=>{
   await writeFile(join(directory,'chatgpt.enc'),Buffer.from(JSON.stringify({...record,expiresAt:Date.now()+3600000})))
   let requestBody:Record<string,unknown>|undefined
   const request=vi.fn(async(input:RequestInfo|URL,init?:RequestInit)=>{
+    if(String(input)==='https://api.openai.com/v1/models')return new Response(JSON.stringify({models:[{slug:'gpt-test',display_name:'Test',visibility:'list',supported_reasoning_efforts:['low','none']}]}),{status:200})
     if(String(input)==='https://api.openai.com/v1/responses'){
       requestBody=JSON.parse(String(init?.body))
       return new Response('data: {"type":"response.output_text.delta","delta":"Chào buổi sáng."}\n\ndata: {"type":"response.completed"}\n\n',{status:200})
@@ -53,8 +54,23 @@ test('sends Responses API input as a user content list',async()=>{
   })
   const connection=new ChatGPTConnection(directory,request as typeof fetch)
   await connection.initialize()
-  await expect(connection.respond('gpt-test','Good morning.','Translate this sentence.')).resolves.toBe('Chào buổi sáng.')
+  await expect(connection.respond('gpt-test','Good morning.','Translate this sentence.',undefined,'low')).resolves.toBe('Chào buổi sáng.')
   expect(requestBody).toMatchObject({model:'gpt-test',input:[{role:'user',content:'Good morning.'}],instructions:'Translate this sentence.',store:false,stream:true})
+  expect(requestBody).toHaveProperty('reasoning',{effort:'low'})
+})
+
+test('blocks models outside the account list and rejects unadvertised None before inference',async()=>{
+  await writeFile(join(directory,'chatgpt.enc'),Buffer.from(JSON.stringify({...record,expiresAt:Date.now()+3600000})))
+  const request=vi.fn(async(input:RequestInfo|URL)=>{
+    if(String(input)==='https://api.openai.com/v1/models')return new Response(JSON.stringify({models:[{slug:'gpt-listed',display_name:'Listed',visibility:'list',supported_reasoning_efforts:['low']}]}),{status:200})
+    if(String(input)==='https://api.openai.com/v1/responses')return new Response('',{status:500})
+    throw new Error(`Unexpected request ${String(input)}`)
+  })
+  const connection=new ChatGPTConnection(directory,request as typeof fetch)
+  await connection.initialize()
+  await expect(connection.respond('gpt-unlisted','Hello','Translate',undefined,'low')).rejects.toThrow('không nằm trong danh sách')
+  await expect(connection.respond('gpt-listed','Hello','Translate',undefined,'none')).rejects.toThrow('chưa xác nhận')
+  expect(request.mock.calls.filter(([url])=>String(url)==='https://api.openai.com/v1/responses')).toHaveLength(0)
 })
 
 test('serializes concurrent refreshes so rotating refresh tokens are used once',async()=>{

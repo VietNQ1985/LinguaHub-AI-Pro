@@ -10,6 +10,7 @@ import { readCompletedResponse } from './responses'
 import { readIssuedClientId, saveIssuedClientId } from './registration'
 import { createRefreshRequest, mergeRefreshedToken } from './token-refresh'
 import type { ReasoningEffort } from '../../shared/model-reasoning'
+import type { AiTimingHandler } from '../../shared/ai-timing'
 
 const recordSchema = z.object({clientId:z.string(),subject:z.string(),email:z.string(),accessToken:z.string(),refreshToken:z.string().optional(),idToken:z.string(),expiresAt:z.number(),scopes:z.array(z.string())})
 type RecordData = z.infer<typeof recordSchema>
@@ -20,6 +21,8 @@ export class ChatGPTConnection {
   private sessionVersion = 0
   private refreshPromise: Promise<string> | null = null
   private refreshController: AbortController | null = null
+  private modelCache: { expiresAt: number; models: Array<{slug:string;name:string;reasoningEfforts?:ReasoningEffort[]}> } | null = null
+  private modelListPromise: Promise<Array<{slug:string;name:string;reasoningEfforts?:ReasoningEffort[]}>> | null = null
   constructor(private directory: string, private request: typeof fetch = fetch) {}
   private async save(record: RecordData) {
     if(!await safeStorage.isAsyncEncryptionAvailable())throw new Error('Windows chưa cung cấp mã hóa an toàn.')
@@ -27,6 +30,7 @@ export class ChatGPTConnection {
     const path=join(this.directory,'chatgpt.enc')
     await writeFile(`${path}.tmp`,data);await rename(`${path}.tmp`,path)
     this.record=record
+    this.modelCache=null
   }
   async initialize() {
     this.registeredClientId = await readIssuedClientId(this.directory)
@@ -47,6 +51,7 @@ export class ChatGPTConnection {
     if(this.connecting)throw new Error('Anh chờ phiên đăng nhập kết thúc trước khi ngắt kết nối.')
     const record=this.record
     this.record=null
+    this.modelCache=null
     this.sessionVersion++
     this.refreshController?.abort(new DOMException('Đã ngắt kết nối ChatGPT.','AbortError'))
     let revoked=false
@@ -116,16 +121,36 @@ export class ChatGPTConnection {
     return this.refreshPromise
   }
   async listModels(){
+    if(this.modelCache && this.modelCache.expiresAt>Date.now())return this.modelCache.models
+    if(this.modelListPromise)return this.modelListPromise
+    this.modelListPromise=(async()=>{
     const response=await this.request(`${RESOURCE}/models`,{headers:{Authorization:`Bearer ${await this.accessToken()}`},signal:AbortSignal.timeout(15000)})
     if(!response.ok)throw new Error(`Không lấy được model ChatGPT (${response.status}).`)
-    const data=z.object({models:z.array(z.object({slug:z.string(),display_name:z.string(),visibility:z.string()}))}).parse(await response.json())
-    return data.models.filter(model=>model.visibility==='list').map(model=>({slug:model.slug,name:model.display_name}))
+    const data=z.object({models:z.array(z.object({slug:z.string(),display_name:z.string(),visibility:z.string(),supported_reasoning_efforts:z.array(z.string()).optional(),supported_reasoning_levels:z.array(z.string()).optional()}))}).parse(await response.json())
+    const validEfforts=new Set<ReasoningEffort>(['none','low','medium','high','xhigh','max'])
+    const models=data.models.filter(model=>model.visibility==='list').map(model=>{
+      const advertised=model.supported_reasoning_efforts ?? model.supported_reasoning_levels
+      const reasoningEfforts=advertised?.filter((effort):effort is ReasoningEffort=>validEfforts.has(effort as ReasoningEffort))
+      return {slug:model.slug,name:model.display_name,...(reasoningEfforts?{reasoningEfforts}:{})}
+    })
+    this.modelCache={expiresAt:Date.now()+300000,models}
+    return models
+    })().finally(()=>{this.modelListPromise=null})
+    return this.modelListPromise
   }
-  async respond(model:string,input:string,instructions:string,signal?:AbortSignal,reasoningEffort?:ReasoningEffort){
+  async respond(model:string,input:string,instructions:string,signal?:AbortSignal,reasoningEffort?:ReasoningEffort,onTiming?:AiTimingHandler){
+    const models=await this.listModels()
+    const authorized=models.find(candidate=>candidate.slug===model)
+    if(!authorized)throw new Error('Model này không nằm trong danh sách tài khoản ChatGPT được cấp quyền. Hãy làm mới danh sách model trong Cài đặt.')
+    if(reasoningEffort==='none' && !authorized.reasoningEfforts?.includes('none'))throw new Error('Danh sách tài khoản chưa xác nhận model này hỗ trợ mức None. Hãy chọn Low hoặc mức được công bố.')
     const requestSignal=signal?AbortSignal.any([signal,AbortSignal.timeout(90000)]):AbortSignal.timeout(90000)
     const payload:Record<string,unknown>={model,input:[{role:'user',content:input}],instructions,store:false,stream:true}
-    if(reasoningEffort)payload.reasoning={effort:reasoningEffort}
-    return readCompletedResponse(await this.request(`${RESOURCE}/responses`,{method:'POST',headers:{Authorization:`Bearer ${await this.accessToken()}`,'Content-Type':'application/json'},body:JSON.stringify(payload),signal:requestSignal}))
+    if(reasoningEffort!==undefined)payload.reasoning={effort:reasoningEffort}
+    const token=await this.accessToken()
+    const requestStartedAt=performance.now()
+    const response=await this.request(`${RESOURCE}/responses`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify(payload),signal:requestSignal})
+    onTiming?.({requestMs:performance.now()-requestStartedAt})
+    return readCompletedResponse(response,requestStartedAt,onTiming)
   }
   async connect(newRegistration = false) {
     if(this.connecting)throw new Error('Đang có phiên đăng nhập chờ hoàn tất.')

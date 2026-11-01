@@ -3,7 +3,7 @@ import { LiveTranslation } from './LiveTranslation'
 import { AiResult } from './AiResult'
 import { ChatGPTAccount } from './ChatGPTAccount'
 import { AdvancedSettings } from './AdvancedSettings'
-import { DEFAULT_CHATGPT_MODEL, DEFAULT_REASONING_EFFORT, DEFAULT_TRANSLATION_REASONING_EFFORT, isGpt6Model, REASONING_EFFORTS, supportsNoReasoning, type ReasoningEffort } from '../../shared/model-reasoning'
+import { DEFAULT_CHATGPT_MODEL, DEFAULT_REASONING_EFFORT, DEFAULT_TRANSLATION_REASONING_EFFORT, isGpt6Model, REASONING_EFFORTS, type ReasoningEffort } from '../../shared/model-reasoning'
 
 type PanelMode = 'translate' | 'reply' | 'settings'
 type Theme = 'light' | 'dark'
@@ -45,6 +45,7 @@ export function AiPanel() {
   const [translationReasoningEffort, setTranslationReasoningEffort] = useState<ReasoningEffort>(DEFAULT_TRANSLATION_REASONING_EFFORT)
   const [fastMode, setFastMode] = useState(false)
   const [models, setModels] = useState<string[]>([])
+  const [modelReasoningEfforts, setModelReasoningEfforts] = useState<Record<string,ReasoningEffort[]>>({})
   const [theme, setTheme] = useState<Theme>('light')
   const [input, setInput] = useState('')
   const [output, setOutput] = useState<unknown>(null)
@@ -80,7 +81,7 @@ export function AiPanel() {
     setError('')
     void window.lingua.setPreferences({ theme, model: value }).catch(() => setError('Không lưu được mô hình AI.'))
     const slug = value.startsWith('chatgpt:') ? value.slice(8) : ''
-    if (isGpt6Model(slug) && !supportsNoReasoning(slug) && reasoningEffort === 'none') {
+    if (isGpt6Model(slug) && !modelReasoningEfforts[slug]?.includes('none') && reasoningEffort === 'none') {
       setReasoningEffort('low')
       void window.lingua.setReasoningEffort('low').catch(() => setError('Không lưu được mức suy luận.'))
     }
@@ -128,6 +129,7 @@ export function AiPanel() {
       const values = await window.lingua.chatgptModels()
       if (!values.length) { setError('Tài khoản ChatGPT chưa có mô hình khả dụng.'); return }
       const names = values.map(value => 'chatgpt:' + value.slug)
+      setModelReasoningEfforts(Object.fromEntries(values.map(value=>[value.slug,value.reasoningEfforts||[]])))
       setModels(names)
       saveModel(names.includes(DEFAULT_CHATGPT_MODEL) ? DEFAULT_CHATGPT_MODEL : names[0])
     } catch (failure) {
@@ -232,12 +234,12 @@ export function AiPanel() {
           {model.startsWith('chatgpt:') && isGpt6Model(model.slice(8)) && <>
             <label htmlFor="reasoning-effort">Mức suy luận cho tác vụ khác</label>
             <select id="reasoning-effort" value={reasoningEffort} onChange={event => saveReasoningEffort(event.target.value as ReasoningEffort)}>
-              {REASONING_EFFORTS.filter(effort => effort !== 'none' || supportsNoReasoning(model.slice(8))).map(effort => <option key={effort} value={effort}>{reasoningEffortLabels[effort]}</option>)}
+              {REASONING_EFFORTS.filter(effort => effort !== 'none' || modelReasoningEfforts[model.slice(8)]?.includes('none')).map(effort => <option key={effort} value={effort}>{reasoningEffortLabels[effort]}</option>)}
             </select>
             <p className="helper-text">Mặc định Max; áp dụng cho gợi ý trả lời và các tác vụ AI khác.</p>
             <label htmlFor="translation-reasoning-effort">Mức suy luận cho tác vụ dịch</label>
             <select id="translation-reasoning-effort" value={translationReasoningEffort} onChange={event => saveTranslationReasoningEffort(event.target.value as ReasoningEffort)}>
-              {REASONING_EFFORTS.filter(effort => effort !== 'none' || supportsNoReasoning(model.slice(8))).map(effort => <option key={effort} value={effort}>{reasoningEffortLabels[effort]}</option>)}
+              {REASONING_EFFORTS.filter(effort => effort !== 'none' || modelReasoningEfforts[model.slice(8)]?.includes('none')).map(effort => <option key={effort} value={effort}>{reasoningEffortLabels[effort]}</option>)}
             </select>
             <p className="helper-text">Mặc định Low để dịch nhanh hơn; có cấu hình riêng, không đổi mức của tác vụ khác.</p>
             <label className="checkbox-label"><input type="checkbox" checked={fastMode} onChange={event => saveFastMode(event.target.checked)} /> Ưu tiên tốc độ khi dịch</label>

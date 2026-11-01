@@ -44,7 +44,7 @@ declare global {
       setMasking(enabled: boolean): Promise<void>
       allowCloud(): Promise<boolean>
       allowBackgroundCloud(): Promise<boolean>
-      chatgptModels(): Promise<{ slug: string; name: string }[]>
+      chatgptModels(): Promise<{ slug: string; name: string; reasoningEfforts?: import('../../shared/model-reasoning').ReasoningEffort[] }[]>
       connectChatGPT(): Promise<{ connected: boolean; email: string | null; usageEnabled: boolean }>
       connectChatGPTNewWorkspace(): Promise<{ connected: boolean; email: string | null; usageEnabled: boolean } | null>
       chatgptStatus(): Promise<{ connected: boolean; email: string | null; usageEnabled: boolean }>

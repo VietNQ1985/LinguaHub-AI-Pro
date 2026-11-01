@@ -36,7 +36,7 @@ test('rejects malformed translation instead of presenting it as valid',async()=>
   await expect(runLocalAi('translate','Hello','local')).rejects.toThrow()
 })
 test('only sends text to the fixed local endpoint',async()=>{
-  const fetch = vi.fn().mockResolvedValue({ok:true,json:async()=>({message:{content:'{"translation":"Xin chào","explanation":"Lời chào"}'}})})
+  const fetch = vi.fn().mockResolvedValue(new Response('{"message":{"content":"{\\"translation\\":\\"Xin chào\\",\\"explanation\\":\\"Lời chào\\"}"},"done":true}\n'))
   vi.stubGlobal('fetch',fetch)
   await expect(runLocalAi('translate','Hello','local')).resolves.toMatchObject({translation:'Xin chào'})
   expect(fetch.mock.calls[0][0]).toBe('http://127.0.0.1:11434/api/chat')
@@ -46,6 +46,15 @@ test('translates a batch using exactly the requested message ids',async()=>{
   const result=await runLocalAi('translateMessages',input,'local',async()=>JSON.stringify({translations:[{id:'m1',translation:'Tôi sẽ xem lại.',explanation:''},{id:'m0',translation:'Vui lòng gửi báo cáo.',explanation:''}]})) as {translations:Array<{id:string;translation:string}>}
   expect(result.translations).toHaveLength(2)
   expect(result.translations.find(message=>message.id==='m0')?.translation).toBe('Vui lòng gửi báo cáo.')
+})
+test('automatic translation prompts are concise and include only matching ERP terms',async()=>{
+  const input=JSON.stringify({messages:[{id:'m0',text:'Please confirm the purchase order.'}]})
+  let instructions=''
+  await runLocalAi('translateMessages',input,'local',async(_model,_input,prompt)=>{instructions=prompt;return JSON.stringify({translations:[{id:'m0',translation:'Vui lòng xác nhận đơn mua hàng.'}]})})
+  expect(instructions).toContain('purchase order: đơn mua hàng')
+  expect(instructions).not.toContain('financial dimensions:')
+  expect(instructions).not.toContain('explanation')
+  expect(instructions.length).toBeLessThan(900)
 })
 test('marks non-English visible chat messages for the renderer to skip',async()=>{
   const input=JSON.stringify({messages:[{id:'m0',text:'Please send the report.'},{id:'m1',text:'Vui lòng gửi báo cáo.'}]})
