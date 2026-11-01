@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('lingua', {
   setDataRetentionDays: (days:number) => ipcRenderer.invoke('privacy:retention:set',days),
   clearLocalData: () => ipcRenderer.invoke('privacy:clear-local-data'),
   connectChatGPT: () => ipcRenderer.invoke('chatgpt:connect'),
+  connectChatGPTNewWorkspace: () => ipcRenderer.invoke('chatgpt:connect-new-workspace'),
   allowCloud: () => ipcRenderer.invoke('chatgpt:cloud-consent'),
   allowBackgroundCloud: () => ipcRenderer.invoke('chatgpt:background-cloud-consent'),
   disconnectChatGPT: () => ipcRenderer.invoke('chatgpt:disconnect'),
