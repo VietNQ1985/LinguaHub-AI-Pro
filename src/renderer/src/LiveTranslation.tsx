@@ -253,7 +253,7 @@ export function LiveTranslation({ model }: { model: string }) {
     <div className="translation-list" aria-label="Danh sách bản dịch">
       {messages.map(item => <article className="translation-message" key={item.key}>
         <p className="translation-original">{item.text}</p>
-        {item.value
+        {item.value?.translation.trim()
           ? <p className="translation-vietnamese" lang="vi">{item.value.translation}</p>
           : <p className="translation-wait">{item.status === 'needs-review' ? 'Chưa đọc rõ, cần kiểm tra' : item.status === 'not-english' ? 'Không phải tiếng Anh — đã bỏ qua' : item.status === 'waiting-consent' ? 'Chờ anh cho phép dịch bằng ChatGPT' : item.status === 'waiting-model' ? 'Chưa chọn dịch vụ AI' : item.status === 'failed' ? 'Chưa dịch được' : item.status === 'confirming' ? 'Đang xác nhận tin nhắn…' : 'Đang dịch…'}</p>}
         {item.value?.explanation && <details className="translation-details"><summary>Xem giải thích</summary><p>{item.value.explanation}</p></details>}
