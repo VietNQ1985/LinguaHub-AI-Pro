@@ -1,6 +1,6 @@
-import type { AiTimingHandler } from '../../shared/ai-timing'
+import type { AiTextHandler, AiTimingHandler } from '../../shared/ai-timing'
 
-export async function readCompletedResponse(response: Response, requestStartedAt = performance.now(), onTiming?: AiTimingHandler): Promise<string> {
+export async function readCompletedResponse(response: Response, requestStartedAt = performance.now(), onTiming?: AiTimingHandler, onText?: AiTextHandler): Promise<string> {
   if(!response.ok || !response.body)throw new Error(`OpenAI không chấp nhận yêu cầu (${response.status}). Không chuyển sang API trả phí.`)
   const reader=response.body.getReader(), decoder=new TextDecoder()
   let buffer='',text='',completed=false,firstResponseMs:number|null=null
@@ -18,6 +18,7 @@ export async function readCompletedResponse(response: Response, requestStartedAt
         if(event.type==='response.output_text.delta'){
           if(typeof event.delta!=='string')throw new Error('Dữ liệu streaming không hợp lệ.')
           text+=event.delta
+          onText?.(event.delta)
           if(event.delta.length>0 && firstResponseMs===null){firstResponseMs=performance.now()-requestStartedAt;onTiming?.({firstResponseMs})}
         }
         if(event.type==='response.completed'){

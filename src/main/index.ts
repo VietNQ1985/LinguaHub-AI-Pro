@@ -275,7 +275,7 @@ app.whenReady().then(async () => {
     trusted(event)
     if(typeof model!=='string'||typeof text!=='string'||(requestId!==undefined&&(typeof requestId!=='string'||requestId.length<1||requestId.length>100)))throw new Error('Nội dung không hợp lệ')
     if(masking)text=maskSensitive(text)
-    if(model.startsWith('chatgpt:')&&!hasCloudConsentForTask(task,cloudConsent,backgroundCloudConsent))throw new Error(task==='translateMessages'?'Anh cần cho phép gửi chữ tin nhắn hiển thị đến ChatGPT trước.':'Anh cần cho phép xử lý cloud trước khi gửi nội dung.')
+    if(model.startsWith('chatgpt:')&&!hasCloudConsentForTask(task,cloudConsent,backgroundCloudConsent))throw new Error(task==='translateLatest'||task==='translateMessages'?'Anh cần cho phép gửi chữ tin nhắn hiển thị đến ChatGPT trước.':'Anh cần cho phép xử lý cloud trước khi gửi nội dung.')
     const reasoningEffort=model.startsWith('chatgpt:')&&isGpt6Model(model.slice(8))
       ? reasoningEffortForTask(task,learning.getReasoningEffort(),learning.getTranslationReasoningEffort(),learning.getFastMode(),FAST_REASONING_EFFORT)
       : undefined
@@ -286,11 +286,12 @@ app.whenReady().then(async () => {
     try {
       const timing={requestMs:0,firstResponseMs:null as number|null,completionMs:0}
       const onTiming=(update:Partial<typeof timing>)=>Object.assign(timing,update)
+      const onText=(delta:string)=>{if(task==='translateLatest'&&id&&!event.sender.isDestroyed())event.sender.send('ai:stream',{requestId:id,delta})}
       const result=model.startsWith('chatgpt:')
-        ? await runLocalAi(task,text,model.slice(8),(provider,input,instructions,signal,onResponseTiming)=>chatgpt.respond(provider,input,instructions,signal,reasoningEffort,onResponseTiming),controller.signal,onTiming)
-        : await runLocalAi(task,text,model,undefined,controller.signal,onTiming)
+        ? await runLocalAi(task,text,model.slice(8),(provider,input,instructions,signal,onResponseTiming,onResponseText)=>chatgpt.respond(provider,input,instructions,signal,reasoningEffort,onResponseTiming,onResponseText),controller.signal,onTiming,onText)
+        : await runLocalAi(task,text,model,undefined,controller.signal,onTiming,onText)
       await learning.recordAiUsage(model.startsWith('chatgpt:')?'chatgpt':'ollama',task).catch(()=>{})
-      return task==='translateMessages'?{result,timing}:result
+      return task==='translateMessages'||task==='translateLatest'?{result,timing}:result
     } finally { if(id)aiRequests.delete(id) }
   })
   ipcMain.handle('ai:cancel',(event,requestId:unknown)=>{

@@ -3,6 +3,7 @@ import { reasoningEffortForTask, runLocalAi } from './ai'
 afterEach(()=>vi.unstubAllGlobals())
 test('translation reasoning is configurable without changing other tasks',()=>{
   expect(reasoningEffortForTask('translateMessages','max','low',false)).toBe('low')
+  expect(reasoningEffortForTask('translateLatest','max','low',false)).toBe('low')
   expect(reasoningEffortForTask('translate','max','high',false)).toBe('high')
   expect(reasoningEffortForTask('translateMessages','max','high',true)).toBe('low')
   expect(reasoningEffortForTask('reply','max','low',true)).toBe('max')
@@ -55,6 +56,35 @@ test('automatic translation prompts are concise and include only matching ERP te
   expect(instructions).not.toContain('financial dimensions:')
   expect(instructions).not.toContain('explanation')
   expect(instructions.length).toBeLessThan(900)
+})
+test('streams the newest message as plain Vietnamese without an explanation',async()=>{
+  const deltas:string[]=[]
+  let providerInput=''
+  let instructions=''
+  const result=await runLocalAi('translateLatest',JSON.stringify({text:'Please confirm the purchase order.'}),'local',async(_model,input,prompt,_signal,_timing,onText)=>{
+    providerInput=input
+    instructions=prompt
+    onText?.('Vui lòng xác nhận ')
+    onText?.('đơn mua hàng.')
+    return 'Vui lòng xác nhận đơn mua hàng.'
+  },undefined,undefined,delta=>deltas.push(delta)) as {translation:string;explanation:string}
+  expect(providerInput).toBe('Please confirm the purchase order.')
+  expect(instructions).toContain('purchase order: đơn mua hàng')
+  expect(instructions).toContain('Output only the Vietnamese translation')
+  expect(instructions).not.toContain('explanation')
+  expect(deltas).toEqual(['Vui lòng xác nhận ','đơn mua hàng.'])
+  expect(result).toEqual({translation:'Vui lòng xác nhận đơn mua hàng.',explanation:''})
+})
+test('streams local Ollama output for the latest message without JSON mode',async()=>{
+  const deltas:string[]=[]
+  const fetch=vi.fn().mockResolvedValue(new Response('{"message":{"content":"Xin "},"done":false}\n{"message":{"content":"chào."},"done":true}\n'))
+  vi.stubGlobal('fetch',fetch)
+  const result=await runLocalAi('translateLatest',JSON.stringify({text:'Good morning.'}),'local',undefined,undefined,undefined,delta=>deltas.push(delta)) as {translation:string}
+  expect(result.translation).toBe('Xin chào.')
+  expect(deltas).toEqual(['Xin ','chào.'])
+  const body=JSON.parse(String(fetch.mock.calls[0][1]?.body))
+  expect(body).toMatchObject({stream:true})
+  expect(body).not.toHaveProperty('format')
 })
 test('marks non-English visible chat messages for the renderer to skip',async()=>{
   const input=JSON.stringify({messages:[{id:'m0',text:'Please send the report.'},{id:'m1',text:'Vui lòng gửi báo cáo.'}]})

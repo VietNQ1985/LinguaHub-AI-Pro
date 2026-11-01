@@ -13,8 +13,10 @@ test('rejects late usage failure and accepts completed result',async()=>{
 })
 test('reports time to first text and completed stream separately',async()=>{
   const updates:Array<{firstResponseMs?:number|null;completionMs?:number}> = []
+  const deltas:string[]=[]
   const started=performance.now()
-  await expect(readCompletedResponse(new Response('data: {"type":"response.output_text.delta","delta":"Xin chào"}\n\ndata: {"type":"response.completed"}\n\n'),started,value=>updates.push(value))).resolves.toBe('Xin chào')
+  await expect(readCompletedResponse(new Response('data: {"type":"response.output_text.delta","delta":"Xin "}\n\ndata: {"type":"response.output_text.delta","delta":"chào"}\n\ndata: {"type":"response.completed"}\n\n'),started,value=>updates.push(value),delta=>deltas.push(delta))).resolves.toBe('Xin chào')
+  expect(deltas).toEqual(['Xin ','chào'])
   expect(updates.some(value=>typeof value.firstResponseMs==='number')).toBe(true)
   expect(updates.at(-1)?.completionMs).toBeGreaterThanOrEqual(updates.find(value=>typeof value.firstResponseMs==='number')!.firstResponseMs!)
 })

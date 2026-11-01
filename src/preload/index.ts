@@ -44,6 +44,11 @@ contextBridge.exposeInMainWorld('lingua', {
   },
   listModels: () => ipcRenderer.invoke('ai:models'),
   runAi: (task: string, text: string, model: string, requestId?: string) => ipcRenderer.invoke('ai:run', task, text, model, requestId),
+  onAiStream: (requestId:string,callback:(delta:string)=>void) => {
+    const listener=(_event:Electron.IpcRendererEvent,message:{requestId:string;delta:string})=>{if(message.requestId===requestId&&typeof message.delta==='string')callback(message.delta)}
+    ipcRenderer.on('ai:stream',listener)
+    return ()=>ipcRenderer.removeListener('ai:stream',listener)
+  },
   cancelAi: (requestId: string) => ipcRenderer.invoke('ai:cancel', requestId),
   testNotification: () => ipcRenderer.invoke('notifications:test'),
   getNotificationPreferences: () => ipcRenderer.invoke('notifications:get'),

@@ -6,3 +6,4 @@ export type AiResponseTiming = {
 
 export type AiTimingUpdate = Partial<AiResponseTiming>
 export type AiTimingHandler = (timing: AiTimingUpdate) => void
+export type AiTextHandler = (delta: string) => void

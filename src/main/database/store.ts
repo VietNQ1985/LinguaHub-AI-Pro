@@ -108,7 +108,7 @@ export async function createLearningStore(directory: string, wasmPath: string) {
       return true
     },
     async recordAiUsage(provider:unknown,task:unknown){
-      const data=z.object({provider:z.enum(['ollama','chatgpt']),task:z.enum(['translate','translateMessages','reply','replyFromChat','coach','summary','risks'])}).parse({provider,task})
+      const data=z.object({provider:z.enum(['ollama','chatgpt']),task:z.enum(['translate','translateLatest','translateMessages','reply','replyFromChat','coach','summary','risks'])}).parse({provider,task})
       await recordActivity('ai_request',data)
     },
     async setNotificationPreference(service: unknown, enabled: unknown) {

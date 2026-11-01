@@ -10,7 +10,7 @@ import { readCompletedResponse } from './responses'
 import { readIssuedClientId, saveIssuedClientId } from './registration'
 import { createRefreshRequest, mergeRefreshedToken } from './token-refresh'
 import type { ReasoningEffort } from '../../shared/model-reasoning'
-import type { AiTimingHandler } from '../../shared/ai-timing'
+import type { AiTextHandler, AiTimingHandler } from '../../shared/ai-timing'
 
 const recordSchema = z.object({clientId:z.string(),subject:z.string(),email:z.string(),accessToken:z.string(),refreshToken:z.string().optional(),idToken:z.string(),expiresAt:z.number(),scopes:z.array(z.string())})
 type RecordData = z.infer<typeof recordSchema>
@@ -138,7 +138,7 @@ export class ChatGPTConnection {
     })().finally(()=>{this.modelListPromise=null})
     return this.modelListPromise
   }
-  async respond(model:string,input:string,instructions:string,signal?:AbortSignal,reasoningEffort?:ReasoningEffort,onTiming?:AiTimingHandler){
+  async respond(model:string,input:string,instructions:string,signal?:AbortSignal,reasoningEffort?:ReasoningEffort,onTiming?:AiTimingHandler,onText?:AiTextHandler){
     const models=await this.listModels()
     const authorized=models.find(candidate=>candidate.slug===model)
     if(!authorized)throw new Error('Model này không nằm trong danh sách tài khoản ChatGPT được cấp quyền. Hãy làm mới danh sách model trong Cài đặt.')
@@ -150,7 +150,7 @@ export class ChatGPTConnection {
     const requestStartedAt=performance.now()
     const response=await this.request(`${RESOURCE}/responses`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify(payload),signal:requestSignal})
     onTiming?.({requestMs:performance.now()-requestStartedAt})
-    return readCompletedResponse(response,requestStartedAt,onTiming)
+    return readCompletedResponse(response,requestStartedAt,onTiming,onText)
   }
   async connect(newRegistration = false) {
     if(this.connecting)throw new Error('Đang có phiên đăng nhập chờ hoàn tất.')

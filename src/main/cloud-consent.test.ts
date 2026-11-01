@@ -4,6 +4,7 @@ import { hasCloudConsentForTask } from './cloud-consent'
 describe('ChatGPT cloud consent scopes', () => {
   test('manual content consent does not authorize background visible-chat translation', () => {
     expect(hasCloudConsentForTask('translateMessages', true, false)).toBe(false)
+    expect(hasCloudConsentForTask('translateLatest', true, false)).toBe(false)
   })
 
   test('background visible-chat consent does not authorize manually submitted content', () => {
@@ -12,6 +13,7 @@ describe('ChatGPT cloud consent scopes', () => {
 
   test('each consent permits only its intended class of task', () => {
     expect(hasCloudConsentForTask('translateMessages', false, true)).toBe(true)
+    expect(hasCloudConsentForTask('translateLatest', false, true)).toBe(true)
     expect(hasCloudConsentForTask('replyFromChat', false, true)).toBe(true)
     expect(hasCloudConsentForTask('replyFromChat', true, false)).toBe(false)
     expect(hasCloudConsentForTask('translate', true, false)).toBe(true)

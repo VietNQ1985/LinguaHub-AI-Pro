@@ -48,13 +48,15 @@ test('sends Responses API input as a user content list',async()=>{
     if(String(input)==='https://api.openai.com/v1/models')return new Response(JSON.stringify({models:[{slug:'gpt-test',display_name:'Test',visibility:'list',supported_reasoning_efforts:['low','none']}]}),{status:200})
     if(String(input)==='https://api.openai.com/v1/responses'){
       requestBody=JSON.parse(String(init?.body))
-      return new Response('data: {"type":"response.output_text.delta","delta":"Chào buổi sáng."}\n\ndata: {"type":"response.completed"}\n\n',{status:200})
+      return new Response('data: {"type":"response.output_text.delta","delta":"Chào "}\n\ndata: {"type":"response.output_text.delta","delta":"buổi sáng."}\n\ndata: {"type":"response.completed"}\n\n',{status:200})
     }
     throw new Error(`Unexpected request ${String(input)}`)
   })
   const connection=new ChatGPTConnection(directory,request as typeof fetch)
   await connection.initialize()
-  await expect(connection.respond('gpt-test','Good morning.','Translate this sentence.',undefined,'low')).resolves.toBe('Chào buổi sáng.')
+  const deltas:string[]=[]
+  await expect(connection.respond('gpt-test','Good morning.','Translate this sentence.',undefined,'low',undefined,delta=>deltas.push(delta))).resolves.toBe('Chào buổi sáng.')
+  expect(deltas).toEqual(['Chào ','buổi sáng.'])
   expect(requestBody).toMatchObject({model:'gpt-test',input:[{role:'user',content:'Good morning.'}],instructions:'Translate this sentence.',store:false,stream:true})
   expect(requestBody).toHaveProperty('reasoning',{effort:'low'})
 })
