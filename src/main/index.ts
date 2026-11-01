@@ -188,6 +188,18 @@ app.whenReady().then(async () => {
   ipcMain.handle('chatgpt:models',event=>{trusted(event);return chatgpt.listModels()})
   ipcMain.handle('chatgpt:usage-settings',event=>{trusted(event);return shell.openExternal('https://chatgpt.com/settings/usage')})
   ipcMain.handle('chatgpt:connect',event=>{trusted(event);return chatgpt.connect()})
+  ipcMain.handle('chatgpt:connect-new-workspace',async event=>{
+    trusted(event)
+    const answer=await dialog.showMessageBox(window,{
+      type:'question',
+      title:'Đăng nhập bằng tài khoản hoặc không gian làm việc khác',
+      message:'Anh muốn đăng ký kết nối ChatGPT mới?',
+      detail:'OpenAI gắn mỗi đăng ký với tài khoản và không gian làm việc đã chọn. LinguaHub sẽ mở đăng nhập mới, không dùng lại mã đăng ký cũ. Nếu không thành công, kết nối ChatGPT hiện tại vẫn được giữ. Khi thành công, kết nối ChatGPT cũ trong LinguaHub sẽ được thay thế. WhatsApp, Teams và dữ liệu học không bị ảnh hưởng.',
+      buttons:['Hủy','Tiếp tục đăng nhập'],defaultId:0,cancelId:0,
+    })
+    if(answer.response!==1)return null
+    return chatgpt.connect(true)
+  })
   ipcMain.handle('preferences:get', event => { trusted(event); return learning.getPreferences() })
   ipcMain.handle('preferences:set', (event, input) => { trusted(event); return learning.setPreferences(input) })
   ipcMain.handle('vocabulary:clear', async event => {
