@@ -108,7 +108,7 @@ export function AiPanel() {
     </div>
 
     <div className="assistant-content">
-      {/* Keep the translation component mounted: changing tabs or hiding the panel must not stop OCR. */}
+      {/* Keep the translation component mounted: changing tabs or hiding the panel must not stop visible chat reading. */}
       <div style={{ display: mode === 'translate' ? 'block' : 'none' }} aria-hidden={mode !== 'translate'}>
         <LiveTranslation model={model} />
       </div>

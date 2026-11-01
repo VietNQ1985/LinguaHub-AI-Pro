@@ -1,8 +1,9 @@
 import { app, BrowserWindow, WebContentsView, ipcMain, shell, Notification, dialog } from 'electron'
+import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { listLocalModels, runLocalAi, type AiTask } from './ai'
-import { VisibleOcr } from './visible-ocr'
+import { buildVisibleChatReadScript, type ChatDomSnapshot, type ChatService } from './chat-dom-reader'
 import { createLearningStore } from './database/store'
 import { ChatGPTConnection } from './auth/connection'
 import { maskSensitive } from '../shared/mask-sensitive'
@@ -10,12 +11,12 @@ import { isSafeExternalWebUrl, isWorkspaceUrl } from '../shared/navigation'
 import { diagnostic } from './diagnostics'
 import {restoreWindow,saveWindow} from './window-state'
 import { canShowWorkspaceNotification, isNotificationOrigin, type WorkspaceService } from './notification-policy'
-import { getOcrAssetPaths } from './ocr-assets'
 import { hasCloudConsentForTask } from './cloud-consent'
 import { APP_USER_MODEL_ID, TOAST_ACTIVATOR_CLSID, startMenuShortcutPath, toastShortcutDetails } from './windows-notifications'
-const ocr = new VisibleOcr()
 let window: BrowserWindow
 let view: WebContentsView | undefined
+let currentWorkspaceService: ChatService = 'whatsapp'
+let chatReadAuthorized = false
 let workspacePanelWidth=360
 let workspacePanelCollapsed=false
 const views = new Map<string, WebContentsView>()
@@ -125,7 +126,6 @@ app.whenReady().then(async () => {
     const url=current.webContents.getURL()
     const service=[...views.entries()].find(([,entry])=>entry===current)?.[0]
     if(service!=='whatsapp' && service!=='teams')throw new Error('Workspace không hợp lệ')
-    ocr.invalidate()
     await current.webContents.loadURL(isWorkspaceUrl(service,url)?url:sites[service])
     return {title:current.webContents.getTitle()}
   })
@@ -147,11 +147,11 @@ app.whenReady().then(async () => {
     if(answer.response!==1)return false
     cloudConsent=false
     backgroundCloudConsent=false
+    chatReadAuthorized=false
     masking=true
     microphoneAllowed=false
     for(const controller of aiRequests.values())controller.abort(new DOMException('Dữ liệu ứng dụng đã được xóa.','AbortError'))
     aiRequests.clear()
-    ocr.stop()
     for(const child of views.values()){
       const serviceSession=child.webContents.session
       window.contentView.removeChildView(child)
@@ -173,14 +173,14 @@ app.whenReady().then(async () => {
   ipcMain.handle('chatgpt:status',event=>{trusted(event);return chatgpt.status()})
   ipcMain.handle('chatgpt:cloud-consent',async event=>{
     trusted(event)
-    const answer=await dialog.showMessageBox(window,{type:'question',title:'Xử lý nội dung bằng ChatGPT',message:'Cho phép gửi nội dung anh chủ động nhập đến OpenAI để xử lý?',detail:'Dùng quyền gói ChatGPT đã cấp. Quyền này chỉ áp dụng trong lần chạy app hiện tại và chỉ cho nội dung nhập tay; dịch OCR nền cần xác nhận riêng. Ảnh OCR không được gửi.',buttons:['Hủy','Cho phép'],defaultId:0,cancelId:0})
+    const answer=await dialog.showMessageBox(window,{type:'question',title:'Xử lý nội dung bằng ChatGPT',message:'Cho phép gửi nội dung anh chủ động nhập đến OpenAI để xử lý?',detail:'Dùng quyền gói ChatGPT đã cấp. Quyền này chỉ áp dụng trong lần chạy app hiện tại và chỉ cho nội dung nhập tay; dịch tin nhắn hiển thị cần xác nhận riêng.',buttons:['Hủy','Cho phép'],defaultId:0,cancelId:0})
     cloudConsent=answer.response===1
     return cloudConsent
   })
   ipcMain.handle('chatgpt:background-cloud-consent',async event=>{
     trusted(event)
     if(backgroundCloudConsent)return true
-    const answer=await dialog.showMessageBox(window,{type:'question',title:'Cho phép dịch OCR nền bằng ChatGPT?',message:'Gửi chữ nhận dạng trong vùng chat đang hiển thị đến OpenAI để dịch tự động?',detail:'Chỉ văn bản OCR được gửi khi dùng model ChatGPT. Ảnh chụp luôn xử lý cục bộ, không tải lên. Nếu bật che email/số điện thoại, app áp dụng trước khi gửi nhưng có thể bỏ sót. Dừng OCR để ngừng gửi chữ. Anh có thể từ chối và dùng Ollama trên máy.',buttons:['Không cho phép','Cho phép gửi chữ OCR'],defaultId:0,cancelId:0})
+    const answer=await dialog.showMessageBox(window,{type:'question',title:'Cho phép dịch tin nhắn hiển thị bằng ChatGPT?',message:'Gửi chữ lấy từ các tin nhắn đang hiển thị trong WhatsApp hoặc Teams đến OpenAI để dịch tự động?',detail:'LinguaHub đọc nội dung chữ từ DOM của trang ngay trên máy. Chỉ chữ của bong bóng tin đang hiển thị được gửi; không gửi ảnh chụp hoặc nội dung chat ẩn. Bật che email/số điện thoại sẽ áp dụng trước khi gửi nhưng có thể bỏ sót. Dừng dịch để ngừng gửi chữ. Anh có thể từ chối và dùng Ollama trên máy.',buttons:['Không cho phép','Cho phép gửi chữ hiển thị'],defaultId:0,cancelId:0})
     backgroundCloudConsent=answer.response===1
     return backgroundCloudConsent
   })
@@ -214,16 +214,34 @@ app.whenReady().then(async () => {
   ipcMain.handle('learning:complete-daily-lesson', event => { trusted(event); return learning.completeDailyLesson() })
   ipcMain.handle('vocabulary:add', (event, input) => { trusted(event); return learning.add(input) })
   ipcMain.handle('vocabulary:review', (event, id, remembered) => { trusted(event); return learning.review(id, remembered) })
-  ipcMain.handle('ocr:authorize', event => { trusted(event); return ocr.authorize(window) })
-  ipcMain.handle('ocr:assets', event => { trusted(event); return getOcrAssetPaths(app.isPackaged, app.getAppPath(), process.resourcesPath) })
-  ipcMain.handle('ocr:stop', event => { trusted(event); ocr.stop(); backgroundCloudConsent=false })
-  ipcMain.handle('ocr:read', (event, leftPercent: number) => { trusted(event); if (window.isMinimized() || !window.isVisible()) return null; return ocr.recognize(view, leftPercent) })
+  ipcMain.handle('chat:authorize-visible-read', async event => {
+    trusted(event)
+    const answer=await dialog.showMessageBox(window,{type:'question',title:'Cho phép đọc chữ trong chat đang hiển thị?',message:'Cho phép LinguaHub đọc cục bộ chữ trong các tin nhắn đang nhìn thấy ở WhatsApp và Teams?',detail:'App đọc chữ từ DOM của trang, không chụp màn hình và không đọc các tin nhắn đang ẩn. Nội dung chỉ gửi đến ChatGPT nếu anh xác nhận quyền cloud riêng; Ollama xử lý trên máy. Anh có thể tạm dừng bất kỳ lúc nào.',buttons:['Hủy','Cho phép đọc chữ'],defaultId:0,cancelId:0})
+    chatReadAuthorized=answer.response===1
+    return chatReadAuthorized
+  })
+  ipcMain.handle('chat:stop-visible-read', event => { trusted(event); chatReadAuthorized=false; backgroundCloudConsent=false })
+  ipcMain.handle('chat:read-visible', async event => {
+    trusted(event)
+    if(!chatReadAuthorized)throw new Error('Chưa cho phép đọc chữ chat đang hiển thị.')
+    if(window.isMinimized() || !window.isVisible() || !view || view.webContents.isDestroyed() || !view.getVisible())return null
+    if(currentWorkspaceService!=='whatsapp' && currentWorkspaceService!=='teams')return null
+    const url=view.webContents.getURL()
+    if(!isWorkspaceUrl(currentWorkspaceService,url))return null
+    const snapshot=await view.webContents.executeJavaScript(buildVisibleChatReadScript(currentWorkspaceService)) as ChatDomSnapshot
+    const messages=(Array.isArray(snapshot?.messages)?snapshot.messages:[])
+      .filter(item=>item && typeof item.text==='string' && item.text.trim().length>=2)
+      .slice(-60)
+      .map(item=>({text:item.text.trim().slice(0,4000),side:item.side==='left'||item.side==='right'?item.side:'center'}))
+    const conversationId=createHash('sha256').update(`${currentWorkspaceService}:${url}:${String(snapshot?.conversationHint||'').slice(0,200)}`).digest('hex').slice(0,16)
+    return {conversationId,messages,text:messages.map(item=>item.text).join('\n')}
+  })
   ipcMain.handle('ai:models', (event) => { trusted(event); return listLocalModels() })
   ipcMain.handle('ai:run', async (event, task: AiTask, text: string, model: string, requestId?: unknown) => {
     trusted(event)
     if(typeof model!=='string'||typeof text!=='string'||(requestId!==undefined&&(typeof requestId!=='string'||requestId.length<1||requestId.length>100)))throw new Error('Nội dung không hợp lệ')
     if(masking)text=maskSensitive(text)
-    if(model.startsWith('chatgpt:')&&!hasCloudConsentForTask(task,cloudConsent,backgroundCloudConsent))throw new Error(task==='translateMessages'?'Anh cần cho phép gửi chữ OCR nền đến ChatGPT trước.':'Anh cần cho phép xử lý cloud trước khi gửi nội dung.')
+    if(model.startsWith('chatgpt:')&&!hasCloudConsentForTask(task,cloudConsent,backgroundCloudConsent))throw new Error(task==='translateMessages'?'Anh cần cho phép gửi chữ tin nhắn hiển thị đến ChatGPT trước.':'Anh cần cho phép xử lý cloud trước khi gửi nội dung.')
     const controller=new AbortController()
     const id=typeof requestId==='string'?requestId:null
     if(id && aiRequests.has(id))throw new Error('Mã yêu cầu AI đang được dùng.')
@@ -288,7 +306,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('workspace:open', (event, service: keyof typeof sites) => {
     trusted(event)
     if (!Object.hasOwn(sites, service)) throw new Error('Invalid service')
-    ocr.invalidate()
+    currentWorkspaceService=service
     for (const existing of views.values()) existing.setVisible(false)
     const existing = views.get(service)
     if (existing) {
@@ -329,14 +347,14 @@ app.whenReady().then(async () => {
   })
   ipcMain.handle('workspace:dashboard', event => {
     trusted(event)
-    ocr.stop()
+    chatReadAuthorized=false
     backgroundCloudConsent=false
     for(const child of views.values())if(!child.webContents.isDestroyed())child.setVisible(false)
     view=undefined
     return true
   })
   window.on('resize', layoutWorkspaceViews)
-  window.on('closed', () => { void ocr.dispose().catch(()=>{}); for (const child of views.values()) if (!child.webContents.isDestroyed()) child.webContents.close(); views.clear() })
+  window.on('closed', () => { chatReadAuthorized=false; for (const child of views.values()) if (!child.webContents.isDestroyed()) child.webContents.close(); views.clear() })
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   window.webContents.on('render-process-gone',()=>{void diagnostic('renderer-gone')})
   void diagnostic('application-ready')

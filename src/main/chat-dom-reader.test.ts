@@ -1,0 +1,47 @@
+import { JSDOM } from 'jsdom'
+import { expect, test } from 'vitest'
+import { buildVisibleChatReadScript } from './chat-dom-reader'
+
+function runPageScript(html: string, service: 'whatsapp' | 'teams') {
+  const dom = new JSDOM(html, { runScripts: 'outside-only', pretendToBeVisual: true })
+  dom.window.HTMLElement.prototype.getBoundingClientRect = function () {
+    const height = this.getAttribute('data-hidden') === 'true' ? 0 : 30
+    const top = Number(this.getAttribute('data-top') || 10)
+    return { x: 0, y: top, top, left: 0, right: 800, bottom: top + height, width: 800, height, toJSON() { return this } }
+  }
+  return { dom, result: dom.window.eval(buildVisibleChatReadScript(service)) as { conversationHint: string; messages: Array<{ text: string; side: string }> } }
+}
+
+test('reads only visible WhatsApp message bubble text and not chat list or hidden content', () => {
+  const { dom, result } = runPageScript(`
+    <aside>Sidebar text</aside>
+    <main id="main">
+      <header><span>Chat header</span></header>
+      <div data-testid="conversation-panel-messages">
+        <div data-pre-plain-text="[10:00] Alice:"><span class="selectable-text">Please send the updated file.</span></div>
+        <div data-pre-plain-text="[10:01] Bob:" data-hidden="true"><span class="selectable-text">Hidden conversation text</span></div>
+      </div>
+    </main>`, 'whatsapp')
+
+  expect(result.conversationHint).toContain('Chat header')
+  expect(result.messages).toEqual([{ text: 'Please send the updated file.', side: 'center' }])
+  dom.window.close()
+})
+
+test('reads Teams message body nodes from the visible chat pane', () => {
+  const { dom, result } = runPageScript(`
+    <div data-tid="chat-pane-messageList">
+      <div data-tid="chat-pane-message"><span class="sender">Alice</span><div data-tid="messageBodyContent">The meeting is moved to Friday.</div></div>
+      <div data-tid="chat-pane-message" data-hidden="true"><div data-tid="messageBodyContent">Not visible</div></div>
+    </div>
+    <div data-tid="chat-list">Other chat preview</div>`, 'teams')
+
+  expect(result.messages).toEqual([{ text: 'The meeting is moved to Friday.', side: 'center' }])
+  expect(JSON.stringify(result)).not.toContain('Other chat preview')
+  dom.window.close()
+})
+
+test('limits page-side read script to supported chat services', () => {
+  expect(buildVisibleChatReadScript('teams')).toContain('teams')
+  expect(buildVisibleChatReadScript('whatsapp')).toContain('whatsapp')
+})

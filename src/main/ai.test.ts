@@ -40,6 +40,11 @@ test('translates a batch using exactly the requested message ids',async()=>{
   expect(result.translations).toHaveLength(2)
   expect(result.translations.find(message=>message.id==='m0')?.translation).toBe('Vui lòng gửi báo cáo.')
 })
+test('marks non-English visible chat messages for the renderer to skip',async()=>{
+  const input=JSON.stringify({messages:[{id:'m0',text:'Please send the report.'},{id:'m1',text:'Vui lòng gửi báo cáo.'}]})
+  const result=await runLocalAi('translateMessages',input,'local',async()=>JSON.stringify({translations:[{id:'m0',translation:'Vui lòng gửi báo cáo.',explanation:'Câu yêu cầu lịch sự.'},{id:'m1',translation:'',explanation:''}]})) as {translations:Array<{id:string;translation:string}>}
+  expect(result.translations.find(message=>message.id==='m1')?.translation).toBe('')
+})
 test('rejects missing, duplicate, and invented ids from batched translation',async()=>{
   const input=JSON.stringify({messages:[{id:'m0',text:'Hello there.'},{id:'m1',text:'Thank you.'}]})
   await expect(runLocalAi('translateMessages',input,'local',async()=>JSON.stringify({translations:[{id:'m0',translation:'Xin chào.',explanation:''}]}))).rejects.toThrow('đúng mã')

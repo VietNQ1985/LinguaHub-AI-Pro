@@ -17,10 +17,9 @@ declare global {
       testNotification(): Promise<boolean>
       getNotificationPreferences(): Promise<{ whatsapp: boolean; teams: boolean }>
       setNotificationPreference(service: WorkspaceService, enabled: boolean): Promise<{ whatsapp: boolean; teams: boolean }>
-      authorizeOcr(): Promise<boolean>
-      getOcrAssetPaths(): Promise<{ workerUrl: string; corePath: string }>
-      stopOcr(): Promise<void>
-      readOcr(left: number): Promise<{ pngBase64: string; width: number; height: number } | null>
+      authorizeVisibleChatRead(): Promise<boolean>
+      stopVisibleChatRead(): Promise<void>
+      readVisibleChat(): Promise<{ conversationId: string; text: string; messages: Array<{ text: string; side: 'left' | 'right' | 'center' }> } | null>
       listVocabulary(): Promise<import('./Vocabulary').Word[]>
       addVocabulary(input: { term: string; meaning: string }): Promise<void>
       reviewVocabulary(id: string, remembered: boolean): Promise<void>

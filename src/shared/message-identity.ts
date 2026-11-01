@@ -1,6 +1,6 @@
 /**
  * Distinguish two visible chat bubbles even when their text is identical.
- * Keys are ephemeral and scoped to one OCR snapshot/conversation.
+ * Keys are ephemeral and scoped to one visible chat snapshot/conversation.
  * They must never be used as long-lived cross-scroll message identifiers.
  */
 export function messageIdentityKeys(messages: ReadonlyArray<{ text: string }>): string[] {

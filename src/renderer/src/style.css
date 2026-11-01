@@ -142,13 +142,11 @@ h2, h3, h4 { color: var(--text); }
 }
 .translation-wait { font-size: 13px; color: var(--muted); font-style: italic; }
 .translation-details { margin-top: 12px; }
-.translation-details summary, .ocr-settings summary { cursor: pointer; color: var(--accent); font-size: 13px; }
+.translation-details summary, .visible-chat-settings summary { cursor: pointer; color: var(--accent); font-size: 13px; }
 .translation-details p { margin-top: 8px; color: var(--muted); font-size: 13px; }
-.ocr-settings { padding-top: 16px; margin-top: 18px; border-top: 1px solid var(--border); }
-.ocr-settings p { font-size: 13px; margin: 12px 0; color: var(--muted); }
-.ocr-settings label { display: block; font-size: 13px; margin-top: 12px; }
-.ocr-settings input[type="range"] { display: block; width: 100%; margin-top: 10px; accent-color: var(--accent); }
-.ocr-settings pre { white-space: pre-wrap; font-size: 12px; overflow-wrap: anywhere; }
+.visible-chat-settings { padding-top: 16px; margin-top: 18px; border-top: 1px solid var(--border); }
+.visible-chat-settings p { font-size: 13px; margin: 12px 0; color: var(--muted); }
+.visible-chat-settings pre { white-space: pre-wrap; font-size: 12px; overflow-wrap: anywhere; }
 .reply-view, .settings-view { padding: 18px 16px 28px; }
 .helper-text { color: var(--muted); font-size: 13px; margin: 9px 0 16px; }
 .reply-view label, .settings-view label { display: block; color: var(--text); font-size: 14px; font-weight: 600; margin: 12px 0 7px; }

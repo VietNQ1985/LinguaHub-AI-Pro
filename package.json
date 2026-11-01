@@ -2,7 +2,7 @@
   "name": "linguahub-ai-pro",
   "version": "0.1.0",
   "private": true,
-  "description": "A privacy-first Windows messaging workspace with local OCR and English learning tools.",
+  "description": "A privacy-first Windows messaging workspace with visible chat translation and English learning tools.",
   "license": "MIT",
   "type": "module",
   "main": "./out/main/index.js",
@@ -27,12 +27,12 @@
     "react-dom": "19.3.1",
     "sql.js": "1.15.2",
     "tailwind-merge": "3.7.0",
-    "tesseract.js": "7.0.0",
     "zod": "4.6.7",
     "zustand": "5.0.16"
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.3.3",
+    "@types/jsdom": "^30.0.0",
     "@types/node": "24.0.0",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
@@ -49,7 +49,7 @@
   "build": {
     "appId": "com.linguahub.ai.pro",
     "productName": "LinguaHub AI Pro",
-    "asar": true,"asarUnpack": ["node_modules/tesseract.js/**", "node_modules/tesseract.js-core/**"],
+    "asar": true,
     "directories": {
       "output": "release"
     },
@@ -61,21 +61,15 @@
       {
         "from": "node_modules/sql.js/dist/sql-wasm.wasm",
         "to": "sql-wasm.wasm"
-      },
-      {
-        "from": "node_modules/tesseract.js/dist/worker.min.js",
-        "to": "ocr/worker.min.js"
-      },
-      {
-        "from": "node_modules/tesseract.js-core",
-        "to": "ocr/core"
       }
     ],
     "win": {
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "assets/linguahub.ico"
