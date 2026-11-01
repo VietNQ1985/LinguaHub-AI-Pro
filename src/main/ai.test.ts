@@ -1,6 +1,13 @@
 import { afterEach, expect, test, vi } from 'vitest'
-import { runLocalAi } from './ai'
+import { reasoningEffortForTask, runLocalAi } from './ai'
 afterEach(()=>vi.unstubAllGlobals())
+test('translation reasoning is configurable without changing other tasks',()=>{
+  expect(reasoningEffortForTask('translateMessages','max','low',false)).toBe('low')
+  expect(reasoningEffortForTask('translate','max','high',false)).toBe('high')
+  expect(reasoningEffortForTask('translateMessages','max','high',true)).toBe('low')
+  expect(reasoningEffortForTask('reply','max','low',true)).toBe('max')
+  expect(reasoningEffortForTask('summary','high','low',true)).toBe('high')
+})
 test('coach requires pronunciation guidance and learning explanations',async()=>{
   const complete={meaning:'Vui lòng kiểm tra',grammar:'Câu yêu cầu',ipa:'/pliːz/',pronunciationHint:'Gợi ý tham khảo',stress:'Nhấn vào review',alternatives:['Could you review this?'],commonMistakes:['Không bỏ động từ chính'],vocabulary:[{term:'review',meaning:'Kiểm tra'}]}
   await expect(runLocalAi('coach','Please review this.','test',async()=>JSON.stringify(complete))).resolves.toMatchObject({stress:'Nhấn vào review'})

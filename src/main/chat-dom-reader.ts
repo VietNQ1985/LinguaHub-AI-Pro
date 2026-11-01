@@ -1,5 +1,5 @@
 export type ChatService = 'whatsapp' | 'teams'
-export type ChatDomMessage = { text: string; side: 'left' | 'right' | 'center' }
+export type ChatDomMessage = { text: string; side: 'left' | 'right' | 'center'; id?: string }
 export type ChatDomSnapshot = { conversationHint: string; messages: ChatDomMessage[] }
 
 /** Builds a fixed, read-only script for the embedded service page. It never accepts page code from the renderer. */
@@ -75,19 +75,26 @@ function readVisibleChatPage(service: ChatService): ChatDomSnapshot {
     seen.add(key)
     const className = typeof bubble.className === 'string' ? bubble.className : ''
     const side = /message-out|message-self|own-message/i.test(className) ? 'right' : /message-in|message-other/i.test(className) ? 'left' : 'center'
-    messages.push({ text, side })
+    const stableId = [bubble.getAttribute('data-id'), bubble.getAttribute('data-message-id'), bubble.id]
+      .map(value => value?.trim() || '')
+      .find(value => value.length >= 1 && value.length <= 200)
+    messages.push({ text, side, ...(stableId ? { id: stableId } : {}) })
   }
 
   const header = service === 'whatsapp'
     ? first(['#main header', '#main [data-testid="conversation-info-header"]'])
     : first(['[data-tid="chat-pane-header"]', 'main header', '[role="main"] header'])
-  const conversationHint = ((header as HTMLElement | null)?.innerText || header?.textContent || '')
-    .split('\n')
-    .map(line => line.replace(/\s+/g, ' ').trim())
-    .filter(Boolean)
-    .slice(0, 3)
-    .join(' ')
-    .slice(0, 200)
+  const headerElement = header as HTMLElement | null
+  const stableConversationId = ['data-conversation-id', 'data-chat-id', 'data-thread-id', 'data-id']
+    .map(name => header?.getAttribute(name)?.trim() || '')
+    .find(value => value.length >= 1 && value.length <= 200)
+  const stableConversationLabel = [header?.getAttribute('aria-label'), header?.getAttribute('title')]
+    .map(value => value?.trim() || '')
+    .find(value => value.length >= 1 && value.length <= 200)
+  const browserHeaderLine = headerElement?.innerText?.split('\n').map(line => line.trim()).find(Boolean)
+  const primaryHeaderLine = (browserHeaderLine || header?.firstElementChild?.textContent || header?.textContent || '')
+    .replace(/\s+/g, ' ').trim().slice(0, 200)
+  const conversationHint = stableConversationId ? `id:${stableConversationId}` : stableConversationLabel ? `label:${stableConversationLabel}` : primaryHeaderLine
 
   return { conversationHint, messages }
 }

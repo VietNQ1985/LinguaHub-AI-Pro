@@ -24,4 +24,12 @@ describe('visible message identity', () => {
     const keys = messageIdentityKeys([{ text: ' UAT  tomorrow ' }, { text: 'uat tomorrow' }])
     expect(keys[0]).not.toBe(keys[1])
   })
+
+  it('uses stable website IDs across reordered visible snapshots while including edits', () => {
+    const first=messageIdentityKeys([{id:'wa-123',text:'Hello'},{id:'wa-456',text:'Thanks'}])
+    const scrolled=messageIdentityKeys([{id:'wa-999',text:'Earlier'},{id:'wa-456',text:'Thanks'},{id:'wa-123',text:'Hello'}])
+    expect(first[0]).toBe(scrolled[2])
+    expect(first[1]).toBe(scrolled[1])
+    expect(messageIdentityKeys([{id:'wa-123',text:'Edited'}])[0]).not.toBe(first[0])
+  })
 })

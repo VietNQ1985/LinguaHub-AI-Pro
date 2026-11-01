@@ -20,7 +20,8 @@ declare global {
       authorizeVisibleChatRead(): Promise<boolean>
       hasVisibleChatReadAuthorization(): Promise<boolean>
       stopVisibleChatRead(): Promise<void>
-      readVisibleChat(): Promise<{ conversationId: string; text: string; messages: Array<{ text: string; side: 'left' | 'right' | 'center' }> } | null>
+      readVisibleChat(): Promise<{ conversationId: string; text: string; messages: Array<{ text: string; side: 'left' | 'right' | 'center'; id?: string }> } | null>
+      onVisibleChatChanged(callback: (change: {service:WorkspaceService;observedAt:number}) => void): () => void
       listVocabulary(): Promise<import('./Vocabulary').Word[]>
       addVocabulary(input: { term: string; meaning: string }): Promise<void>
       reviewVocabulary(id: string, remembered: boolean): Promise<void>
@@ -33,6 +34,8 @@ declare global {
       setPreferences(input: { theme: string; model: string }): Promise<void>
       getReasoningEffort(): Promise<import('../../shared/model-reasoning').ReasoningEffort>
       setReasoningEffort(value: import('../../shared/model-reasoning').ReasoningEffort): Promise<import('../../shared/model-reasoning').ReasoningEffort>
+      getTranslationReasoningEffort(): Promise<import('../../shared/model-reasoning').ReasoningEffort>
+      setTranslationReasoningEffort(value: import('../../shared/model-reasoning').ReasoningEffort): Promise<import('../../shared/model-reasoning').ReasoningEffort>
       getFastMode(): Promise<boolean>
       setFastMode(enabled: boolean): Promise<boolean>
       clearVocabulary(): Promise<boolean>

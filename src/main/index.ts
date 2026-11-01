@@ -2,7 +2,7 @@ import { app, BrowserWindow, WebContentsView, ipcMain, shell, Notification, dial
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { listLocalModels, runLocalAi, type AiTask } from './ai'
+import { listLocalModels, reasoningEffortForTask, runLocalAi, type AiTask } from './ai'
 import { buildVisibleChatReadScript, type ChatDomSnapshot, type ChatService } from './chat-dom-reader'
 import { createLearningStore } from './database/store'
 import { ChatGPTConnection } from './auth/connection'
@@ -71,6 +71,11 @@ app.whenReady().then(async () => {
   workspacePanelWidth=learning.getPreferences().panelWidth
   const notificationPermissions = await learning.getNotificationPreferences()
   const notificationPrompts = new Map<WorkspaceService, Promise<boolean>>()
+  const chatMutationDebounces = new Map<ChatService, {timer:ReturnType<typeof setTimeout>;contents:Electron.WebContents;observedAt:number}>()
+  const clearChatMutationDebounces=()=>{for(const entry of chatMutationDebounces.values())clearTimeout(entry.timer);chatMutationDebounces.clear()}
+  const controlChatObservers=(enabled:boolean,only?:ChatService)=>{
+    for(const [service,child] of views.entries())if((!only||service===only)&&!child.webContents.isDestroyed())child.webContents.send('chat:observer-control',enabled)
+  }
   const grantNotificationPermission = async (service: WorkspaceService) => {
     if (notificationPermissions[service]) return true
     const pending = notificationPrompts.get(service)
@@ -113,6 +118,20 @@ app.whenReady().then(async () => {
     layoutWorkspaceViews()
     if(value.persist)void learning.setPanelWidth(workspacePanelWidth).catch(()=>{})
   })
+  ipcMain.on('chat:visible-dom-change',(event,rawObservedAt:unknown)=>{
+    const service=[...views.entries()].find(([,child])=>child.webContents===event.sender)?.[0] as ChatService|undefined
+    if(!service||event.senderFrame!==event.sender.mainFrame||!chatReadAuthorized||!window.isVisible()||window.isMinimized()||!view||view.webContents!==event.sender||!view.getVisible()||!isWorkspaceUrl(service,event.sender.getURL()))return
+    const observedAt=typeof rawObservedAt==='number'&&Number.isFinite(rawObservedAt)&&Math.abs(Date.now()-rawObservedAt)<60000?rawObservedAt:Date.now()
+    const previous=chatMutationDebounces.get(service)
+    if(previous)clearTimeout(previous.timer)
+    const contents=event.sender
+    const timer=setTimeout(()=>{
+      chatMutationDebounces.delete(service)
+      if(!chatReadAuthorized||view?.webContents!==contents||!view.getVisible()||!isWorkspaceUrl(service,contents.getURL()))return
+      window.webContents.send('chat:visible-changed',{service,observedAt})
+    },45)
+    chatMutationDebounces.set(service,{timer,contents,observedAt})
+  })
   let microphoneAllowed=false
   window.webContents.session.setPermissionCheckHandler((contents,permission)=>contents===window.webContents && permission==='media' && microphoneAllowed)
   window.webContents.session.setPermissionRequestHandler(async(contents,permission,callback,details)=>{
@@ -128,6 +147,7 @@ app.whenReady().then(async () => {
     const service=[...views.entries()].find(([,entry])=>entry===current)?.[0]
     if(service!=='whatsapp' && service!=='teams')throw new Error('Workspace không hợp lệ')
     await current.webContents.loadURL(isWorkspaceUrl(service,url)?url:sites[service])
+    if(chatReadAuthorized&&view===current)current.webContents.send('chat:observer-control',true)
     return {title:current.webContents.getTitle()}
   })
   ipcMain.handle('privacy:masking',(event,enabled:unknown)=>{trusted(event);if(typeof enabled!=='boolean')throw new Error('Cài đặt không hợp lệ');masking=enabled})
@@ -205,6 +225,8 @@ app.whenReady().then(async () => {
   ipcMain.handle('preferences:set', (event, input) => { trusted(event); return learning.setPreferences(input) })
   ipcMain.handle('preferences:reasoning-effort:get', event => { trusted(event); return learning.getReasoningEffort() })
   ipcMain.handle('preferences:reasoning-effort:set', async (event, input) => { trusted(event); return learning.setReasoningEffort(input) })
+  ipcMain.handle('preferences:translation-reasoning-effort:get', event => { trusted(event); return learning.getTranslationReasoningEffort() })
+  ipcMain.handle('preferences:translation-reasoning-effort:set', async (event, input) => { trusted(event); return learning.setTranslationReasoningEffort(input) })
   ipcMain.handle('preferences:fast-mode:get', event => { trusted(event); return learning.getFastMode() })
   ipcMain.handle('preferences:fast-mode:set', async (event, enabled) => { trusted(event); return learning.setFastMode(enabled) })
   ipcMain.handle('vocabulary:clear', async event => {
@@ -223,10 +245,15 @@ app.whenReady().then(async () => {
     trusted(event)
     const answer=await dialog.showMessageBox(window,{type:'question',title:'Cho phép đọc chữ trong chat đang hiển thị?',message:'Cho phép LinguaHub đọc cục bộ chữ trong các tin nhắn đang nhìn thấy ở WhatsApp và Teams?',detail:'App đọc chữ từ DOM của trang, không chụp màn hình và không đọc các tin nhắn đang ẩn. Nội dung chỉ gửi đến ChatGPT nếu anh xác nhận quyền cloud riêng; Ollama xử lý trên máy. Anh có thể tạm dừng bất kỳ lúc nào.',buttons:['Hủy','Cho phép đọc chữ'],defaultId:0,cancelId:0})
     chatReadAuthorized=answer.response===1
+    controlChatObservers(false)
+    if(chatReadAuthorized){
+      const activeService=[...views.entries()].find(([,child])=>child===view)?.[0]
+      if(activeService==='whatsapp'||activeService==='teams')controlChatObservers(true,activeService)
+    }
     return chatReadAuthorized
   })
   ipcMain.handle('chat:visible-read-status', event => { trusted(event); return chatReadAuthorized })
-  ipcMain.handle('chat:stop-visible-read', event => { trusted(event); chatReadAuthorized=false; backgroundCloudConsent=false })
+  ipcMain.handle('chat:stop-visible-read', event => { trusted(event); chatReadAuthorized=false; backgroundCloudConsent=false; clearChatMutationDebounces(); controlChatObservers(false) })
   ipcMain.handle('chat:read-visible', async event => {
     trusted(event)
     if(!chatReadAuthorized)throw new Error('Chưa cho phép đọc chữ chat đang hiển thị.')
@@ -238,7 +265,7 @@ app.whenReady().then(async () => {
     const messages=(Array.isArray(snapshot?.messages)?snapshot.messages:[])
       .filter(item=>item && typeof item.text==='string' && item.text.trim().length>=2)
       .slice(-60)
-      .map(item=>({text:item.text.trim().slice(0,4000),side:item.side==='left'||item.side==='right'?item.side:'center'}))
+      .map(item=>({text:item.text.trim().slice(0,4000),side:item.side==='left'||item.side==='right'?item.side:'center',...(typeof item.id==='string'&&item.id.length>=1&&item.id.length<=200?{id:item.id}: {})}))
     const conversationId=createHash('sha256').update(`${currentWorkspaceService}:${url}:${String(snapshot?.conversationHint||'').slice(0,200)}`).digest('hex').slice(0,16)
     return {conversationId,messages,text:messages.map(item=>item.text).join('\n')}
   })
@@ -248,7 +275,9 @@ app.whenReady().then(async () => {
     if(typeof model!=='string'||typeof text!=='string'||(requestId!==undefined&&(typeof requestId!=='string'||requestId.length<1||requestId.length>100)))throw new Error('Nội dung không hợp lệ')
     if(masking)text=maskSensitive(text)
     if(model.startsWith('chatgpt:')&&!hasCloudConsentForTask(task,cloudConsent,backgroundCloudConsent))throw new Error(task==='translateMessages'?'Anh cần cho phép gửi chữ tin nhắn hiển thị đến ChatGPT trước.':'Anh cần cho phép xử lý cloud trước khi gửi nội dung.')
-    const reasoningEffort=model.startsWith('chatgpt:')&&isGpt6Model(model.slice(8))?(learning.getFastMode()?FAST_REASONING_EFFORT:learning.getReasoningEffort()):undefined
+    const reasoningEffort=model.startsWith('chatgpt:')&&isGpt6Model(model.slice(8))
+      ? reasoningEffortForTask(task,learning.getReasoningEffort(),learning.getTranslationReasoningEffort(),learning.getFastMode(),FAST_REASONING_EFFORT)
+      : undefined
     const controller=new AbortController()
     const id=typeof requestId==='string'?requestId:null
     if(id && aiRequests.has(id))throw new Error('Mã yêu cầu AI đang được dùng.')
@@ -314,15 +343,16 @@ app.whenReady().then(async () => {
     trusted(event)
     if (!Object.hasOwn(sites, service)) throw new Error('Invalid service')
     currentWorkspaceService=service
-    for (const existing of views.values()) existing.setVisible(false)
+    for (const existing of views.values()) { existing.webContents.send('chat:observer-control',false); existing.setVisible(false) }
     const existing = views.get(service)
     if (existing) {
       view = existing
       view.setVisible(true)
+      if(chatReadAuthorized)view.webContents.send('chat:observer-control',true)
       layoutWorkspaceViews()
       return { title: view.webContents.getTitle() }
     }
-    view = new WebContentsView({ webPreferences: { partition: `persist:linguahub-${service}`, nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false } })
+    view = new WebContentsView({ webPreferences: { preload: join(import.meta.dirname, '../preload/chat-view.cjs'), partition: `persist:linguahub-${service}`, nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false } })
     views.set(service, view)
     const serviceContents=view.webContents
     serviceContents.session.setPermissionCheckHandler((contents,permission,origin)=>canShowWorkspaceNotification(service,permission,origin,notificationPermissions[service],contents===null || contents===serviceContents))
@@ -350,12 +380,17 @@ app.whenReady().then(async () => {
     window.contentView.addChildView(view)
     layoutWorkspaceViews()
     const openingView = view
-    return openingView.webContents.loadURL(sites[service]).then(() => ({ title: openingView.webContents.getTitle() }))
+    return openingView.webContents.loadURL(sites[service]).then(() => {
+      if(chatReadAuthorized&&view===openingView)openingView.webContents.send('chat:observer-control',true)
+      return { title: openingView.webContents.getTitle() }
+    })
   })
   ipcMain.handle('workspace:dashboard', event => {
     trusted(event)
     chatReadAuthorized=false
     backgroundCloudConsent=false
+    clearChatMutationDebounces()
+    controlChatObservers(false)
     for(const child of views.values())if(!child.webContents.isDestroyed())child.setVisible(false)
     view=undefined
     return true

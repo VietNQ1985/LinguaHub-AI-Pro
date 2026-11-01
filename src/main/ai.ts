@@ -1,5 +1,10 @@
 import { z } from 'zod'
 import { ERP_GLOSSARY_PROMPT } from '../shared/erp-glossary'
+import type { ReasoningEffort } from '../shared/model-reasoning'
+
+export function reasoningEffortForTask(task: string, defaultEffort: ReasoningEffort, translationEffort: ReasoningEffort, accelerateTranslation: boolean, fastEffort: ReasoningEffort = 'low'): ReasoningEffort {
+  return task === 'translate' || task === 'translateMessages' ? accelerateTranslation ? fastEffort : translationEffort : defaultEffort
+}
 
 const repliesSchema = z.object({ replies: z.array(z.object({ style: z.enum(['simple', 'professional', 'friendly']), english: z.string().trim().min(1), vietnamese: z.string().trim().min(1), explanation: z.string().trim().min(1) })).length(3).refine(replies => new Set(replies.map(reply => reply.style)).size === 3, 'Phải có đủ ba phong cách trả lời.') })
 const schemas = {

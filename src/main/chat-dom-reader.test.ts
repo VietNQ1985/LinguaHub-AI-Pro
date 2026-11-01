@@ -28,6 +28,21 @@ test('reads only visible WhatsApp message bubble text and not chat list or hidde
   dom.window.close()
 })
 
+test('returns a stable WhatsApp bubble id when the page supplies one',()=>{
+  const {dom,result}=runPageScript('<main id="main"><div data-testid="conversation-panel-messages"><div data-pre-plain-text="[10:00] Alice:" data-id="wamid-abc"><span class="selectable-text">A stable message.</span></div></div></main>','whatsapp')
+  expect(result.messages).toEqual([{text:'A stable message.',side:'center',id:'wamid-abc'}])
+  dom.window.close()
+})
+
+test('keeps the conversation identity stable when only the contact presence changes',()=>{
+  const first=runPageScript('<main id="main"><header><span>Vinh Luong</span><span>online recently</span></header><div data-testid="conversation-panel-messages"></div></main>','whatsapp')
+  const second=runPageScript('<main id="main"><header><span>Vinh Luong</span><span>last seen today at 18:10</span></header><div data-testid="conversation-panel-messages"></div></main>','whatsapp')
+  expect(first.result.conversationHint).toBe('Vinh Luong')
+  expect(second.result.conversationHint).toBe(first.result.conversationHint)
+  first.dom.window.close()
+  second.dom.window.close()
+})
+
 test('reads Teams message body nodes from the visible chat pane', () => {
   const { dom, result } = runPageScript(`
     <div data-tid="chat-pane-messageList">

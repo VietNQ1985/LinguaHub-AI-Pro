@@ -3,7 +3,7 @@ import { LiveTranslation } from './LiveTranslation'
 import { AiResult } from './AiResult'
 import { ChatGPTAccount } from './ChatGPTAccount'
 import { AdvancedSettings } from './AdvancedSettings'
-import { DEFAULT_CHATGPT_MODEL, DEFAULT_REASONING_EFFORT, isGpt6Model, REASONING_EFFORTS, supportsNoReasoning, type ReasoningEffort } from '../../shared/model-reasoning'
+import { DEFAULT_CHATGPT_MODEL, DEFAULT_REASONING_EFFORT, DEFAULT_TRANSLATION_REASONING_EFFORT, isGpt6Model, REASONING_EFFORTS, supportsNoReasoning, type ReasoningEffort } from '../../shared/model-reasoning'
 
 type PanelMode = 'translate' | 'reply' | 'settings'
 type Theme = 'light' | 'dark'
@@ -42,6 +42,7 @@ export function AiPanel() {
   const [mode, setMode] = useState<PanelMode>('translate')
   const [model, setModel] = useState('')
   const [reasoningEffort, setReasoningEffort] = useState<ReasoningEffort>(DEFAULT_REASONING_EFFORT)
+  const [translationReasoningEffort, setTranslationReasoningEffort] = useState<ReasoningEffort>(DEFAULT_TRANSLATION_REASONING_EFFORT)
   const [fastMode, setFastMode] = useState(false)
   const [models, setModels] = useState<string[]>([])
   const [theme, setTheme] = useState<Theme>('light')
@@ -54,11 +55,12 @@ export function AiPanel() {
 
   useEffect(() => {
     let active = true
-    void Promise.all([window.lingua.getPreferences(), window.lingua.getReasoningEffort(), window.lingua.getFastMode()]).then(([preferences, savedEffort, savedFastMode]) => {
+    void Promise.all([window.lingua.getPreferences(), window.lingua.getReasoningEffort(), window.lingua.getTranslationReasoningEffort(), window.lingua.getFastMode()]).then(([preferences, savedEffort, savedTranslationEffort, savedFastMode]) => {
       if (!active) return
       const selectedModel = preferences.model || DEFAULT_CHATGPT_MODEL
       setModel(selectedModel)
       setReasoningEffort(savedEffort)
+      setTranslationReasoningEffort(savedTranslationEffort)
       setFastMode(savedFastMode)
       setTheme(preferences.theme as Theme)
       document.documentElement.dataset.theme = preferences.theme
@@ -88,6 +90,12 @@ export function AiPanel() {
     setReasoningEffort(value)
     setError('')
     void window.lingua.setReasoningEffort(value).catch(() => setError('Không lưu được mức suy luận.'))
+  }
+
+  const saveTranslationReasoningEffort = (value: ReasoningEffort) => {
+    setTranslationReasoningEffort(value)
+    setError('')
+    void window.lingua.setTranslationReasoningEffort(value).catch(() => setError('Không lưu được mức suy luận khi dịch.'))
   }
 
   const saveFastMode = (enabled: boolean) => {
@@ -222,13 +230,18 @@ export function AiPanel() {
           </select>
           <p className="helper-text">Đang chọn: {modelLabel(model)}{model.startsWith('chatgpt:') && isGpt6Model(model.slice(8)) ? ` · ${reasoningEffortLabels[reasoningEffort]}` : ''}</p>
           {model.startsWith('chatgpt:') && isGpt6Model(model.slice(8)) && <>
-            <label htmlFor="reasoning-effort">Mức suy luận</label>
+            <label htmlFor="reasoning-effort">Mức suy luận cho tác vụ khác</label>
             <select id="reasoning-effort" value={reasoningEffort} onChange={event => saveReasoningEffort(event.target.value as ReasoningEffort)}>
               {REASONING_EFFORTS.filter(effort => effort !== 'none' || supportsNoReasoning(model.slice(8))).map(effort => <option key={effort} value={effort}>{reasoningEffortLabels[effort]}</option>)}
             </select>
-            <p className="helper-text">Mặc định Max để suy luận kỹ hơn.</p>
-            <label className="checkbox-label"><input type="checkbox" checked={fastMode} onChange={event => saveFastMode(event.target.checked)} /> Ưu tiên tốc độ</label>
-            <p className="helper-text">Khi bật, yêu cầu dùng mức Low để ưu tiên tốc độ. Tắt để quay lại mức {reasoningEffortLabels[reasoningEffort]}.</p>
+            <p className="helper-text">Mặc định Max; áp dụng cho gợi ý trả lời và các tác vụ AI khác.</p>
+            <label htmlFor="translation-reasoning-effort">Mức suy luận cho tác vụ dịch</label>
+            <select id="translation-reasoning-effort" value={translationReasoningEffort} onChange={event => saveTranslationReasoningEffort(event.target.value as ReasoningEffort)}>
+              {REASONING_EFFORTS.filter(effort => effort !== 'none' || supportsNoReasoning(model.slice(8))).map(effort => <option key={effort} value={effort}>{reasoningEffortLabels[effort]}</option>)}
+            </select>
+            <p className="helper-text">Mặc định Low để dịch nhanh hơn; có cấu hình riêng, không đổi mức của tác vụ khác.</p>
+            <label className="checkbox-label"><input type="checkbox" checked={fastMode} onChange={event => saveFastMode(event.target.checked)} /> Ưu tiên tốc độ khi dịch</label>
+            <p className="helper-text">Chỉ áp dụng cho dịch: khi bật sẽ dùng Low; tắt để quay lại mức {reasoningEffortLabels[translationReasoningEffort]}.</p>
           </>}
         </div>
         <div className="settings-group">

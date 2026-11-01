@@ -23,6 +23,8 @@ contextBridge.exposeInMainWorld('lingua', {
   setPreferences: (input: {theme: string; model: string}) => ipcRenderer.invoke('preferences:set', input),
   getReasoningEffort: () => ipcRenderer.invoke('preferences:reasoning-effort:get'),
   setReasoningEffort: (value: string) => ipcRenderer.invoke('preferences:reasoning-effort:set', value),
+  getTranslationReasoningEffort: () => ipcRenderer.invoke('preferences:translation-reasoning-effort:get'),
+  setTranslationReasoningEffort: (value: string) => ipcRenderer.invoke('preferences:translation-reasoning-effort:set', value),
   getFastMode: () => ipcRenderer.invoke('preferences:fast-mode:get'),
   setFastMode: (enabled: boolean) => ipcRenderer.invoke('preferences:fast-mode:set', enabled),
   clearVocabulary: () => ipcRenderer.invoke('vocabulary:clear'),
@@ -35,6 +37,11 @@ contextBridge.exposeInMainWorld('lingua', {
   hasVisibleChatReadAuthorization: () => ipcRenderer.invoke('chat:visible-read-status'),
   stopVisibleChatRead: () => ipcRenderer.invoke('chat:stop-visible-read'),
   readVisibleChat: () => ipcRenderer.invoke('chat:read-visible'),
+  onVisibleChatChanged: (callback: (change: {service:'whatsapp'|'teams';observedAt:number}) => void) => {
+    const listener=(_event:Electron.IpcRendererEvent,change:{service:'whatsapp'|'teams';observedAt:number})=>callback(change)
+    ipcRenderer.on('chat:visible-changed',listener)
+    return ()=>ipcRenderer.removeListener('chat:visible-changed',listener)
+  },
   listModels: () => ipcRenderer.invoke('ai:models'),
   runAi: (task: string, text: string, model: string, requestId?: string) => ipcRenderer.invoke('ai:run', task, text, model, requestId),
   cancelAi: (requestId: string) => ipcRenderer.invoke('ai:cancel', requestId),

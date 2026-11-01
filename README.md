@@ -14,9 +14,9 @@ LinguaHub mở WhatsApp Web hoặc Microsoft Teams Web trong cửa sổ riêng v
 
 Trong **Gợi ý trả lời**, nhấn **Đọc chat & gợi ý trả lời** để tạo ba cách trả lời dựa trên các tin đang hiển thị. Có thể thêm ý muốn nói bằng tiếng Việt hoặc để trống để AI tự đề xuất theo ngữ cảnh. LinguaHub chỉ đưa bản nháp, không tự gửi. ChatGPT cần quyền đọc cục bộ và quyền gửi chữ chat hiển thị riêng; Ollama xử lý trên máy.
 
-Trong Cài đặt, model mặc định là **GPT-6 Luna** với mức suy luận **Max**. Bật **Ưu tiên tốc độ** để gửi yêu cầu ở mức **Low**; khi tắt, app quay lại mức suy luận đã chọn.
+Trong Cài đặt, model mặc định là **GPT-6 Luna**. Mức suy luận mặc định **Max** áp dụng cho gợi ý trả lời và tác vụ AI khác; dịch có mức riêng mặc định **Low**. **Ưu tiên tốc độ khi dịch** cũng chỉ áp dụng cho dịch và dùng Low. Anh có thể chọn mức dịch riêng mà không đổi mức của tác vụ khác.
 
-Bản cài Windows x64 vừa build: `release/LinguaHub-AI-Pro-Setup.exe`; SHA-256 `81513632f6b8f23c6eba9e704b0d0efb4b2b0260b058fe67e1c3574c1690a682`.
+Kết quả benchmark theo kịch bản, gồm giới hạn cũ và số đo mới với AI giả lập, nằm trong [docs/translation-speed-benchmark.md](docs/translation-speed-benchmark.md).
 
 Trang web có thể thay đổi cấu trúc DOM; tin nhắn đang tải lười hoặc chưa được dựng trong giao diện không được đọc. Hiện chưa xác nhận end-to-end trên trang WhatsApp/Teams trực tiếp sau thay đổi adapter.
 
@@ -24,6 +24,8 @@ Trang web có thể thay đổi cấu trúc DOM; tin nhắn đang tải lười 
 
 - Thanh trên cùng chuyển giữa WhatsApp và Microsoft Teams; panel bên phải có **Dịch tự động** và **Gợi ý trả lời**. Khung dịch vẫn được giữ khi đổi tab hoặc thu gọn panel.
 - Quyền đọc chữ trong chat và quyền gửi chữ đến ChatGPT là hai xác nhận độc lập. Dừng dịch sẽ ngừng đọc và thu hồi quyền gửi nền trong phiên.
+- Bộ theo dõi thay đổi chỉ khởi động sau khi anh cho phép đọc chat; nó theo dõi vùng tin nhắn và tiêu đề rồi báo cho bộ đọc cục bộ. Nếu trang thay đổi mà không phát sự kiện phù hợp, bộ quét dự phòng kiểm tra lại sau tối đa 1,8 giây.
+- Mở **Cách đọc tin nhắn → Chẩn đoán tốc độ** để xem thời gian phát hiện, xác nhận, chờ lượt AI, AI xử lý/trả kết quả và cập nhật panel. Phần này mặc định được thu gọn.
 - Chế độ che email/số điện thoại có thể bật trước khi gửi cloud nhưng chỉ là heuristic. Không lưu nội dung chat, mật khẩu hoặc cookie ChatGPT vào cơ sở dữ liệu ứng dụng/log.
 - Thông báo Windows do WhatsApp/Teams phát cần được bật trong từng website và vẫn phải kiểm tra với tin nhắn thật.
 - Có từ vựng, lịch ôn, bài học mẫu, English Coach, cài đặt lưu trữ và xóa dữ liệu cục bộ.

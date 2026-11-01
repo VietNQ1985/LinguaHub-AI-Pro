@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { vocabulary, appSettings, activity } from './schema'
-import { DEFAULT_REASONING_EFFORT, REASONING_EFFORTS } from '../../shared/model-reasoning'
+import { DEFAULT_REASONING_EFFORT, DEFAULT_TRANSLATION_REASONING_EFFORT, REASONING_EFFORTS } from '../../shared/model-reasoning'
 
 function localDayKey(timestamp: number) {
   const date=new Date(timestamp)
@@ -135,6 +135,18 @@ export async function createLearningStore(directory: string, wasmPath: string) {
       ensureHealthy()
       const reasoningEffort=z.enum(REASONING_EFFORTS).parse(input)
       db.insert(appSettings).values({key:'reasoningEffort',value:reasoningEffort}).onConflictDoUpdate({target:appSettings.key,set:{value:reasoningEffort}}).run()
+      await persist()
+      return reasoningEffort
+    },
+    getTranslationReasoningEffort() {
+      ensureHealthy()
+      const value=db.select().from(appSettings).where(eq(appSettings.key,'translationReasoningEffort')).get()?.value
+      return (REASONING_EFFORTS as readonly string[]).includes(value || '') ? value as typeof REASONING_EFFORTS[number] : DEFAULT_TRANSLATION_REASONING_EFFORT
+    },
+    async setTranslationReasoningEffort(input: unknown) {
+      ensureHealthy()
+      const reasoningEffort=z.enum(REASONING_EFFORTS).parse(input)
+      db.insert(appSettings).values({key:'translationReasoningEffort',value:reasoningEffort}).onConflictDoUpdate({target:appSettings.key,set:{value:reasoningEffort}}).run()
       await persist()
       return reasoningEffort
     },
