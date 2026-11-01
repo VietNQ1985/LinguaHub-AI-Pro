@@ -97,8 +97,9 @@ app.whenReady().then(async () => {
   const layoutWorkspaceViews=()=>{
     if(window.isDestroyed())return
     const [width,height]=window.getContentSize()
-    const panelWidth=workspacePanelCollapsed?52:workspacePanelWidth
-    for(const child of views.values())child.setBounds({x:220,y:90,width:Math.max(300,width-220-panelWidth),height:Math.max(100,height-90)})
+    const panelWidth=workspacePanelCollapsed?56:workspacePanelWidth
+    const dividerWidth=workspacePanelCollapsed?0:6
+    for(const child of views.values())child.setBounds({x:0,y:64,width:Math.max(300,width-panelWidth-dividerWidth),height:Math.max(100,height-64)})
   }
   ipcMain.on('workspace:panel-layout',(event,input:unknown)=>{
     if(event.sender!==window.webContents||event.senderFrame!==window.webContents.mainFrame||!input||typeof input!=='object')return
