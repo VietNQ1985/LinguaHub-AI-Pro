@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { BrowserOcr } from './browser-ocr'
 import { TranslationCache } from '../../shared/translation-cache'
+import { messageIdentityKeys } from '../../shared/message-identity'
 
 type MessageStatus = 'confirming' | 'waiting-model' | 'waiting-consent' | 'translating' | 'translated' | 'needs-review' | 'failed'
 type TranslationValue = { translation: string; explanation: string }
 type VisibleMessage = { key: string; text: string; confidence: number; side: 'left' | 'right' | 'center'; status: MessageStatus; value?: TranslationValue }
 type TranslationBatch = { translations: Array<{ id: string; translation: string; explanation: string }> }
-
-function messageKey(text: string) { return text.normalize('NFKC').replace(/\s+/g, ' ').trim().toLocaleLowerCase() }
 
 export function LiveTranslation({ model }: { model: string }) {
   const [enabled, setEnabled] = useState(false)
@@ -183,21 +182,20 @@ export function LiveTranslation({ model }: { model: string }) {
           }
           if (result.conversationId) conversationId.current = result.conversationId
           const currentVersion = conversationVersion.current
+          const keys = messageIdentityKeys(result.messages)
           const observedThisScan = new Set<string>()
-          for (const item of result.messages) {
-            const key = messageKey(item.text)
-            if (observedThisScan.has(key)) continue
+          for (const key of keys) {
             observedThisScan.add(key)
             observations.set(key, (observations.get(key) || 0) + 1)
           }
           for (const key of observations.keys()) if (!observedThisScan.has(key)) observations.delete(key)
-          const signature = JSON.stringify([result.conversationId, result.messages.map(item => messageKey(item.text))])
+          const signature = JSON.stringify([result.conversationId, keys])
           if (signature === lastSnapshot) unchangedScans++
           else { unchangedScans = 0; lastSnapshot = signature }
           nextDelay = unchangedScans >= 6 ? 10000 : unchangedScans >= 3 ? 6000 : 2200
 
           const visible = result.messages.map((item, index): VisibleMessage => {
-            const key = messageKey(item.text)
+            const key = keys[index]
             const cached = activeModel ? cache.current.get(activeModel, item.text) : undefined
             const failureKey = JSON.stringify([activeModel, key])
             const messageStatus: MessageStatus = item.confidence < 65 ? 'needs-review' : !activeModel ? model.startsWith('chatgpt:') ? 'waiting-consent' : 'waiting-model' : cached ? 'translated' : failed.current.has(failureKey) ? 'failed' : (observations.get(key) || 0) < 2 ? 'confirming' : 'translating'
@@ -247,24 +245,44 @@ export function LiveTranslation({ model }: { model: string }) {
     if (await window.lingua.authorizeOcr()) { conversationId.current = null; setMessages([]); setEnabled(true) }
   }
 
-  return <div className="notice live-translation">
-    <b>Dịch tin nhắn đang hiển thị</b>
-    <p role="status">{enabled ? '● ' : ''}{status}</p>
-    <label>Bỏ phần bên trái website: {left}%<input type="range" min="0" max="80" value={left} disabled={enabled} onChange={event => setLeft(Number(event.target.value))}/></label>
-    <p>{model.startsWith('chatgpt:') ? 'Ảnh OCR luôn xử lý cục bộ và không gửi lên cloud. Nếu anh cho phép riêng, chữ nhận dạng sẽ được gửi đến OpenAI để dịch tự động; dừng OCR để ngừng gửi.' : model ? 'Ảnh OCR luôn xử lý cục bộ. Chữ nhận dạng được dịch trên máy bằng Ollama.' : 'OCR chỉ nhận dạng vùng chat đang hiển thị; chọn ChatGPT hoặc kết nối Ollama để tự dịch.'} Tin dưới 65% độ tin cậy không gửi đi dịch. Người gửi được ước lượng theo vị trí bong bóng.</p>
-    <button onClick={() => void toggle().catch(() => setStatus('Không bật được OCR.'))}>{enabled ? 'Dừng OCR' : 'Cho phép và bật OCR'}</button>
-    {messages.map((item,index) => <article className="translation-message" key={`${index}:${item.key}`}>
-      <small>{item.side === 'left' ? 'Bên trái' : item.side === 'right' ? 'Bên phải' : 'Ở giữa'} · OCR {Math.round(item.confidence)}%</small>
-      <p className="translation-original">{item.text}</p>
-      <button disabled={item.status === 'needs-review' || item.status === 'confirming'} onClick={() => window.dispatchEvent(new CustomEvent('linguahub:coach-text', { detail: item.text }))}>Học câu này</button>
-      {item.value ? <p className="translation-vietnamese">{item.value.translation}</p> : <small>{item.status === 'needs-review' ? 'Cần kiểm tra OCR' : item.status === 'waiting-consent' ? 'Chờ quyền gửi chữ OCR đến ChatGPT' : item.status === 'waiting-model' ? 'Chờ chọn model' : item.status === 'failed' ? 'Dịch lỗi' : item.status === 'confirming' ? 'Xác nhận nội dung tin' : 'Đang chờ dịch'}</small>}
-      {item.value?.explanation ? <details><summary>Giải thích</summary><p>{item.value.explanation}</p></details> : null}
-    </article>)}
-    {messages.length ? <details><summary>Văn bản OCR gốc</summary><pre className="ai-result">{messages.map(item=>item.text).join('\n')}</pre></details> : null}
+  const hasFailures = messages.some(item => item.status === 'failed')
+  return <div className="live-translation">
+    <div className="live-control">
+      <span className={enabled ? 'live-dot live-dot-on' : 'live-dot'} aria-hidden="true" />
+      <span className="live-state">{enabled ? 'Đang bật dịch tự động' : 'Đã tắt dịch tự động'}</span>
+      <button type="button" className={enabled ? 'secondary-button' : 'primary-button'} onClick={() => void toggle().catch(() => setStatus('Không thay đổi được trạng thái dịch.'))}>{enabled ? 'Tạm dừng' : 'Bật dịch'}</button>
+    </div>
+
+    <p role="status" className="translation-status">{status.replaceAll('OCR', 'nhận diện chữ')}</p>
+    {!model && <div className="translation-empty">Anh hãy chọn dịch vụ AI trong <button type="button" className="text-button" onClick={() => window.dispatchEvent(new Event('linguahub:settings'))}>Cài đặt</button> để bắt đầu.</div>}
+    {enabled && messages.length === 0 && <div className="translation-empty">Anh mở một cuộc trò chuyện trên WhatsApp hoặc Teams. Bản dịch sẽ xuất hiện ở đây khi ứng dụng nhận diện được tin nhắn.</div>}
+    {!enabled && <div className="translation-empty">Sau khi bật dịch và cấp quyền, ứng dụng sẽ đọc nội dung đang hiển thị trong cửa sổ trò chuyện và dịch sang tiếng Việt.</div>}
+
+    {hasFailures && <button type="button" className="retry-button" onClick={() => { failed.current.clear(); setStatus('Đang thử dịch lại…') }}>↻ Thử dịch lại các tin chưa thành công</button>}
+
+    <div className="translation-list" aria-label="Danh sách bản dịch">
+      {messages.map(item => <article className="translation-message" key={item.key}>
+        <p className="translation-original">{item.text}</p>
+        {item.value
+          ? <p className="translation-vietnamese" lang="vi">{item.value.translation}</p>
+          : <p className="translation-wait">{item.status === 'needs-review' ? 'Nhận diện chưa rõ, cần kiểm tra' : item.status === 'waiting-consent' ? 'Chờ anh cho phép dịch bằng ChatGPT' : item.status === 'waiting-model' ? 'Chưa chọn dịch vụ AI' : item.status === 'failed' ? 'Chưa dịch được' : item.status === 'confirming' ? 'Đang nhận diện tin nhắn…' : 'Đang dịch…'}</p>}
+        {item.value?.explanation && <details className="translation-details"><summary>Xem giải thích</summary><p>{item.value.explanation}</p></details>}
+      </article>)}
+    </div>
+
+    <details className="ocr-settings">
+      <summary>Tùy chỉnh vùng nhận diện</summary>
+      <p>Ứng dụng chỉ nhận diện vùng chat đang hiển thị. Nếu bản dịch chứa tên liên hệ hoặc nút điều hướng, anh điều chỉnh vùng bên trái ở đây.</p>
+      <label>Ẩn phần bên trái trang: {left}%
+        <input type="range" min="0" max="80" value={left} disabled={enabled} onChange={event => setLeft(Number(event.target.value))} />
+      </label>
+      {enabled && <p>Tạm dừng dịch để điều chỉnh vùng nhận diện.</p>}
+      {messages.length > 0 && <details><summary>Xem văn bản đã nhận diện</summary><pre>{messages.map(item => item.text).join('\n')}</pre></details>}
+    </details>
   </div>
 }
 
 function sourceByIdHasText(sourceById: Map<string, VisibleMessage>, item: VisibleMessage) {
-  for (const source of sourceById.values()) if (source.key === item.key || source.text === item.text) return true
+  for (const source of sourceById.values()) if (source.key === item.key) return true
   return false
 }
