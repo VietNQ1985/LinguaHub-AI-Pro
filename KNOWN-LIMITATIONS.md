@@ -1,5 +1,14 @@
 # Giới hạn và việc cần xác minh
 
+## Bản cải tiến giao diện tiếng Việt (chưa nghiệm thu)
+
+- Mã nguồn đã thay sidebar lớn bằng thanh WhatsApp/Teams phía trên và panel dịch tiếng Việt phía phải; quyền riêng tư, dữ liệu và thông báo được đưa vào Cài đặt nâng cao.
+- Khung LiveTranslation luôn được giữ trong React khi thu gọn panel hoặc mở tab Gợi ý trả lời/Cài đặt. Đây là sửa lỗi dừng OCR do unmount ngoài ý muốn, **không** có nghĩa app tiếp tục OCR khi thu nhỏ cửa sổ Windows.
+- Cải tiến nhận diện hai thông điệp có nội dung giống nhau trong một lượt quét bằng thứ tự xuất hiện. Chưa có ID ổn định xuyên cuộn trang; việc ghép tin nhiều dòng và phát hiện đổi cuộc trò chuyện vẫn là heuristic.
+- **Các thay đổi trên nhánh chưa chạy typecheck/unit test/build hoặc thử trên Windows trong phiên sửa qua GitHub.** Không có bộ cài mới được xác minh.
+- Chưa có bằng chứng bản dịch tự động chạy tin nhắn thật hoặc SIWC inference thành công trong phiên này. Giữ nguyên giới hạn API và quyền hiện có; không tự sử dụng API trả phí.
+
+
 Đây là bản phát triển. Mã nguồn và kiểm thử đã tiến thêm, nhưng một số luồng phải được xác minh trên app đóng gói và tài khoản/tin nhắn thật.
 
 ## Đã có bằng chứng
