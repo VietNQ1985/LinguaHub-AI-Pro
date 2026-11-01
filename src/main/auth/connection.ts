@@ -124,7 +124,7 @@ export class ChatGPTConnection {
     const requestSignal=signal?AbortSignal.any([signal,AbortSignal.timeout(90000)]):AbortSignal.timeout(90000)
     return readCompletedResponse(await this.request(`${RESOURCE}/responses`,{method:'POST',headers:{Authorization:`Bearer ${await this.accessToken()}`,'Content-Type':'application/json'},body:JSON.stringify({model,input:[{role:'user',content:input}],instructions,store:false,stream:true}),signal:requestSignal}))
   }
-  async connect() {
+  async connect(newRegistration = false) {
     if(this.connecting)throw new Error('Đang có phiên đăng nhập chờ hoàn tất.')
     this.connecting=true
     const server=createServer()
@@ -137,7 +137,9 @@ export class ChatGPTConnection {
       await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve)})
       const address=server.address();if(!address || typeof address==='string')throw new Error('Không mở được callback cục bộ.')
       const previousRecord=this.record
-      const clientId=this.registeredClientId || previousRecord?.clientId || undefined
+      // A new workspace or ChatGPT account needs a new dynamic registration;
+      // an issued client ID is bound to its original account/workspace.
+      const clientId=newRegistration?undefined:(this.registeredClientId || previousRecord?.clientId || undefined)
       const useSavedAccount=clientId!==undefined && clientId===previousRecord?.clientId
       const pending=createAuthorization(host,`http://127.0.0.1:${address.port}/auth/callback`,clientId,{idTokenHint:useSavedAccount?previousRecord.idToken:undefined,loginHint:useSavedAccount?previousRecord.email:undefined})
       const callback=new Promise<{clientId:string;code:string}>((resolve,reject)=>{
@@ -149,7 +151,9 @@ export class ChatGPTConnection {
       })
       await shell.openExternal(pending.url)
       const result=await callback
-      this.registeredClientId=await saveIssuedClientId(this.directory,result.clientId)
+      // Preserve the previous registration until a new workspace has been validated.
+      // The ordinary returning sign-in flow still saves the issued ID early for invalid_grant recovery.
+      if(!newRegistration)this.registeredClientId=await saveIssuedClientId(this.directory,result.clientId)
       const response=await this.request(TOKEN_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'authorization_code',client_id:result.clientId,code:result.code,code_verifier:pending.verifier,redirect_uri:pending.redirectUri,resource:RESOURCE}),signal:AbortSignal.timeout(30000)})
       if(!response.ok)throw new Error(`OpenAI chưa hoàn tất trao đổi quyền (${response.status}).`)
       const token=z.object({id_token:z.string(),access_token:z.string(),refresh_token:z.string().optional(),expires_in:z.number(),scope:z.string()}).parse(await response.json())
@@ -157,10 +161,12 @@ export class ChatGPTConnection {
       const metadata=z.object({jwks_uri:z.string().url()}).parse(await metadataResponse.json())
       if(new URL(metadata.jwks_uri).origin!=='https://auth.openai.com')throw new Error('Không chấp nhận nguồn khóa xác thực.')
       const {payload}=await jwtVerify(token.id_token,createRemoteJWKSet(new URL(metadata.jwks_uri)),{issuer:'https://auth.openai.com',audience:result.clientId})
-      if(payload.nonce!==pending.nonce || !payload.sub || (this.record && payload.sub!==this.record.subject))throw new Error('Danh tính đăng nhập không khớp.')
+      if(payload.nonce!==pending.nonce || !payload.sub || (!newRegistration && this.record && payload.sub!==this.record.subject))throw new Error('Danh tính đăng nhập không khớp.')
       if(!token.scope.split(/\s+/).includes('chatgpt.tokens.use.direct'))throw new Error('Đăng nhập xong nhưng tài khoản chưa cấp quyền dùng gói ChatGPT.')
       this.sessionVersion++
       await this.save({clientId:result.clientId,subject:payload.sub,email:typeof payload.email==='string'?payload.email:'',accessToken:token.access_token,refreshToken:token.refresh_token,idToken:token.id_token,expiresAt:Date.now()+token.expires_in*1000,scopes:token.scope.split(/\s+/).filter(Boolean)})
+      // Only replace the saved registration after successful account/workspace authorization.
+      if(newRegistration)this.registeredClientId=await saveIssuedClientId(this.directory,result.clientId)
       return this.status()
     } finally {if(timeout)clearTimeout(timeout);server.close();this.connecting=false}
   }
