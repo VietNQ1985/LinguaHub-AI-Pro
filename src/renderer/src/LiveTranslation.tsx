@@ -239,6 +239,8 @@ export function LiveTranslation({ model }: { model: string }) {
   }
 
   const hasFailures = messages.some(item => item.status === 'failed')
+  const skippedCount = messages.filter(item => item.status === 'not-english').length
+  const translatableMessages = messages.filter(item => item.status !== 'not-english')
   return <div className="live-translation">
     <div className="live-control">
       <span className={enabled ? 'live-dot live-dot-on' : 'live-dot'} aria-hidden="true" />
@@ -254,13 +256,23 @@ export function LiveTranslation({ model }: { model: string }) {
     {hasFailures && <button type="button" className="retry-button" onClick={() => { failed.current.clear(); setStatus('Đang thử dịch lại…') }}>↻ Thử dịch lại các tin chưa thành công</button>}
 
     <div className="translation-list" aria-label="Danh sách bản dịch">
-      {messages.map(item => <article className="translation-message" key={item.key}>
-        <p className="translation-original">{item.text}</p>
+      {skippedCount > 0 && <p className="translation-skipped">Đã bỏ qua {skippedCount} tin không phải tiếng Anh</p>}
+      {translatableMessages.map(item => <article className="translation-message" key={item.key}>
         {item.value?.translation.trim()
-          ? <p className="translation-vietnamese" lang="vi">{item.value.translation}</p>
-          : <p className="translation-wait">{item.status === 'needs-review' ? 'Chưa đọc rõ, cần kiểm tra' : item.status === 'not-english' ? 'Không phải tiếng Anh — đã bỏ qua' : item.status === 'waiting-consent' ? 'Chờ anh cho phép dịch bằng ChatGPT' : item.status === 'waiting-model' ? 'Chưa chọn dịch vụ AI' : item.status === 'failed' ? 'Chưa dịch được' : item.status === 'confirming' ? 'Đang xác nhận tin nhắn…' : 'Đang dịch…'}</p>}
-        {item.value?.explanation && <details className="translation-details"><summary>Xem giải thích</summary><p>{item.value.explanation}</p></details>}
+          ? <>
+              <p className="translation-vietnamese" lang="vi">{item.value.translation}</p>
+              <details className="translation-details">
+                <summary>Xem câu gốc{item.value.explanation ? ' và giải thích' : ''}</summary>
+                <p className="translation-source">{item.text}</p>
+                {item.value.explanation && <p>{item.value.explanation}</p>}
+              </details>
+            </>
+          : <>
+              <p className="translation-original">{item.text}</p>
+              <p className="translation-wait">{item.status === 'needs-review' ? 'Chưa đọc rõ — kiểm tra lại' : item.status === 'waiting-consent' ? 'Chờ cho phép ChatGPT' : item.status === 'waiting-model' ? 'Chọn dịch vụ AI' : item.status === 'failed' ? 'Dịch chưa thành công' : item.status === 'confirming' ? 'Đang kiểm tra tin mới…' : 'Đang dịch…'}</p>
+            </>}
       </article>)}
+      {messages.length > 0 && translatableMessages.length === 0 && <p className="translation-skipped">Chưa có tin tiếng Anh cần dịch.</p>}
     </div>
 
     <details className="visible-chat-settings">

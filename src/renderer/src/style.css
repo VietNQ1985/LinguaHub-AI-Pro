@@ -112,7 +112,7 @@ h2, h3, h4 { color: var(--text); }
 .assistant-tabs button.selected { color: var(--accent); border-bottom-color: var(--accent); }
 .assistant-content { min-width: 0; }
 .assistant-error { margin: 12px 16px; padding: 11px; border-radius: 8px; color: var(--error); background: var(--soft); font-size: 13px; overflow-wrap: anywhere; }
-.live-translation { padding: 18px 16px 26px; }
+.live-translation { padding: 14px 12px 22px; }
 .live-control { display: flex; align-items: center; gap: 9px; }
 .live-state { font-weight: 600; font-size: 13px; flex: 1; }
 .live-dot { width: 9px; height: 9px; background: #94a3b8; border-radius: 50%; flex: 0 0 9px; }
@@ -124,26 +124,28 @@ h2, h3, h4 { color: var(--text); }
 [data-theme="dark"] .primary-button { color: #102138; }
 .secondary-button { background: var(--soft); color: var(--text); border: 1px solid var(--border); }
 .retry-button { background: transparent; color: var(--accent); border: 1px solid var(--border); width: 100%; margin: 10px 0; }
-.translation-status { font-size: 13px; color: var(--muted); margin: 12px 0 16px; }
+.translation-status { font-size: 12px; color: var(--muted); margin: 9px 0 12px; line-height: 1.45; }
 .translation-empty {
   background: var(--soft); border-radius: 12px; padding: 22px 16px;
   color: var(--muted); font-size: 14px; line-height: 1.65;
 }
 .text-button { border: 0; background: transparent; color: var(--accent); text-decoration: underline; font-size: inherit; padding: 0; }
-.translation-list { display: flex; flex-direction: column; gap: 12px; }
+.translation-list { display: flex; flex-direction: column; gap: 8px; }
 .translation-message {
-  border: 1px solid var(--border); border-radius: 12px;
-  padding: 14px 15px; background: var(--surface); overflow-wrap: anywhere;
+  border: 1px solid var(--border); border-radius: 10px;
+  padding: 10px 12px; background: var(--surface); overflow-wrap: anywhere;
 }
-.translation-original { font-size: 13px; color: var(--muted); line-height: 1.5; margin-bottom: 11px; }
+.translation-original { font-size: 13px; color: var(--muted); line-height: 1.45; margin-bottom: 6px; }
 .translation-vietnamese {
-  font-size: 15px; font-weight: 500; line-height: 1.65; color: var(--text);
-  border-left: 3px solid var(--success); padding-left: 10px;
+  font-size: 14px; font-weight: 500; line-height: 1.5; color: var(--text);
+  border-left: 2px solid var(--success); padding-left: 9px;
 }
-.translation-wait { font-size: 13px; color: var(--muted); font-style: italic; }
-.translation-details { margin-top: 12px; }
-.translation-details summary, .visible-chat-settings summary { cursor: pointer; color: var(--accent); font-size: 13px; }
-.translation-details p { margin-top: 8px; color: var(--muted); font-size: 13px; }
+.translation-wait { font-size: 12px; color: var(--muted); font-style: italic; margin-top: 5px; }
+.translation-skipped { margin: 2px 0 4px; color: var(--muted); font-size: 12px; }
+.translation-details { margin-top: 7px; }
+.translation-details summary, .visible-chat-settings summary { cursor: pointer; color: var(--accent); font-size: 12px; }
+.translation-details p { margin-top: 6px; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.translation-details .translation-source { color: var(--text); }
 .visible-chat-settings { padding-top: 16px; margin-top: 18px; border-top: 1px solid var(--border); }
 .visible-chat-settings p { font-size: 13px; margin: 12px 0; color: var(--muted); }
 .visible-chat-settings pre { white-space: pre-wrap; font-size: 12px; overflow-wrap: anywhere; }
