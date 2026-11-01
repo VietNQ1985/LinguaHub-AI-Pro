@@ -39,6 +39,7 @@ declare global {
       allowBackgroundCloud(): Promise<boolean>
       chatgptModels(): Promise<{ slug: string; name: string }[]>
       connectChatGPT(): Promise<{ connected: boolean; email: string | null; usageEnabled: boolean }>
+      connectChatGPTNewWorkspace(): Promise<{ connected: boolean; email: string | null; usageEnabled: boolean } | null>
       chatgptStatus(): Promise<{ connected: boolean; email: string | null; usageEnabled: boolean }>
       listModels(): Promise<string[]>
       runAi(task: string, text: string, model: string, requestId?: string): Promise<unknown>
