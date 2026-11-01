@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { vocabulary, appSettings, activity } from './schema'
+import { DEFAULT_REASONING_EFFORT, REASONING_EFFORTS } from '../../shared/model-reasoning'
 
 function localDayKey(timestamp: number) {
   const date=new Date(timestamp)
@@ -107,7 +108,7 @@ export async function createLearningStore(directory: string, wasmPath: string) {
       return true
     },
     async recordAiUsage(provider:unknown,task:unknown){
-      const data=z.object({provider:z.enum(['ollama','chatgpt']),task:z.enum(['translate','translateMessages','reply','coach','summary','risks'])}).parse({provider,task})
+      const data=z.object({provider:z.enum(['ollama','chatgpt']),task:z.enum(['translate','translateMessages','reply','replyFromChat','coach','summary','risks'])}).parse({provider,task})
       await recordActivity('ai_request',data)
     },
     async setNotificationPreference(service: unknown, enabled: unknown) {
@@ -124,6 +125,29 @@ export async function createLearningStore(directory: string, wasmPath: string) {
       const values = Object.fromEntries(rows.map(row => [row.key, row.value]))
       const savedWidth=Number(values.panelWidth)
       return { theme: values.theme === 'dark' ? 'dark' : 'light', model: values.model || '', panelWidth:Number.isFinite(savedWidth)&&savedWidth>=280&&savedWidth<=560?savedWidth:360 }
+    },
+    getReasoningEffort() {
+      ensureHealthy()
+      const value=db.select().from(appSettings).where(eq(appSettings.key,'reasoningEffort')).get()?.value
+      return (REASONING_EFFORTS as readonly string[]).includes(value || '') ? value as typeof REASONING_EFFORTS[number] : DEFAULT_REASONING_EFFORT
+    },
+    async setReasoningEffort(input: unknown) {
+      ensureHealthy()
+      const reasoningEffort=z.enum(REASONING_EFFORTS).parse(input)
+      db.insert(appSettings).values({key:'reasoningEffort',value:reasoningEffort}).onConflictDoUpdate({target:appSettings.key,set:{value:reasoningEffort}}).run()
+      await persist()
+      return reasoningEffort
+    },
+    getFastMode() {
+      ensureHealthy()
+      return db.select().from(appSettings).where(eq(appSettings.key,'fastMode')).get()?.value === 'true'
+    },
+    async setFastMode(input: unknown) {
+      ensureHealthy()
+      const enabled=z.boolean().parse(input)
+      db.insert(appSettings).values({key:'fastMode',value:String(enabled)}).onConflictDoUpdate({target:appSettings.key,set:{value:String(enabled)}}).run()
+      await persist()
+      return enabled
     },
     async setPreferences(input: unknown) {
       ensureHealthy()

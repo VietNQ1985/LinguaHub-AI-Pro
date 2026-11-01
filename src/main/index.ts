@@ -13,6 +13,7 @@ import {restoreWindow,saveWindow} from './window-state'
 import { canShowWorkspaceNotification, isNotificationOrigin, type WorkspaceService } from './notification-policy'
 import { hasCloudConsentForTask } from './cloud-consent'
 import { APP_USER_MODEL_ID, TOAST_ACTIVATOR_CLSID, startMenuShortcutPath, toastShortcutDetails } from './windows-notifications'
+import { FAST_REASONING_EFFORT, isGpt6Model } from '../shared/model-reasoning'
 let window: BrowserWindow
 let view: WebContentsView | undefined
 let currentWorkspaceService: ChatService = 'whatsapp'
@@ -202,6 +203,10 @@ app.whenReady().then(async () => {
   })
   ipcMain.handle('preferences:get', event => { trusted(event); return learning.getPreferences() })
   ipcMain.handle('preferences:set', (event, input) => { trusted(event); return learning.setPreferences(input) })
+  ipcMain.handle('preferences:reasoning-effort:get', event => { trusted(event); return learning.getReasoningEffort() })
+  ipcMain.handle('preferences:reasoning-effort:set', async (event, input) => { trusted(event); return learning.setReasoningEffort(input) })
+  ipcMain.handle('preferences:fast-mode:get', event => { trusted(event); return learning.getFastMode() })
+  ipcMain.handle('preferences:fast-mode:set', async (event, enabled) => { trusted(event); return learning.setFastMode(enabled) })
   ipcMain.handle('vocabulary:clear', async event => {
     trusted(event)
     const answer = await dialog.showMessageBox(window, {type:'warning',message:'Xóa toàn bộ từ vựng và lịch ôn trên máy này?',detail:'Thao tác không thể hoàn tác.',buttons:['Hủy','Xóa dữ liệu'],defaultId:0,cancelId:0})
@@ -220,6 +225,7 @@ app.whenReady().then(async () => {
     chatReadAuthorized=answer.response===1
     return chatReadAuthorized
   })
+  ipcMain.handle('chat:visible-read-status', event => { trusted(event); return chatReadAuthorized })
   ipcMain.handle('chat:stop-visible-read', event => { trusted(event); chatReadAuthorized=false; backgroundCloudConsent=false })
   ipcMain.handle('chat:read-visible', async event => {
     trusted(event)
@@ -242,13 +248,14 @@ app.whenReady().then(async () => {
     if(typeof model!=='string'||typeof text!=='string'||(requestId!==undefined&&(typeof requestId!=='string'||requestId.length<1||requestId.length>100)))throw new Error('Nội dung không hợp lệ')
     if(masking)text=maskSensitive(text)
     if(model.startsWith('chatgpt:')&&!hasCloudConsentForTask(task,cloudConsent,backgroundCloudConsent))throw new Error(task==='translateMessages'?'Anh cần cho phép gửi chữ tin nhắn hiển thị đến ChatGPT trước.':'Anh cần cho phép xử lý cloud trước khi gửi nội dung.')
+    const reasoningEffort=model.startsWith('chatgpt:')&&isGpt6Model(model.slice(8))?(learning.getFastMode()?FAST_REASONING_EFFORT:learning.getReasoningEffort()):undefined
     const controller=new AbortController()
     const id=typeof requestId==='string'?requestId:null
     if(id && aiRequests.has(id))throw new Error('Mã yêu cầu AI đang được dùng.')
     if(id)aiRequests.set(id,controller)
     try {
       const result=model.startsWith('chatgpt:')
-        ? await runLocalAi(task,text,model.slice(8),(provider,input,instructions,signal)=>chatgpt.respond(provider,input,instructions,signal),controller.signal)
+        ? await runLocalAi(task,text,model.slice(8),(provider,input,instructions,signal)=>chatgpt.respond(provider,input,instructions,signal,reasoningEffort),controller.signal)
         : await runLocalAi(task,text,model,undefined,controller.signal)
       await learning.recordAiUsage(model.startsWith('chatgpt:')?'chatgpt':'ollama',task).catch(()=>{})
       return result

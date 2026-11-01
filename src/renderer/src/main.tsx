@@ -18,6 +18,7 @@ declare global {
       getNotificationPreferences(): Promise<{ whatsapp: boolean; teams: boolean }>
       setNotificationPreference(service: WorkspaceService, enabled: boolean): Promise<{ whatsapp: boolean; teams: boolean }>
       authorizeVisibleChatRead(): Promise<boolean>
+      hasVisibleChatReadAuthorization(): Promise<boolean>
       stopVisibleChatRead(): Promise<void>
       readVisibleChat(): Promise<{ conversationId: string; text: string; messages: Array<{ text: string; side: 'left' | 'right' | 'center' }> } | null>
       listVocabulary(): Promise<import('./Vocabulary').Word[]>
@@ -30,6 +31,10 @@ declare global {
       clearLocalData(): Promise<{ cleared: boolean; chatgptRevoked: boolean }>
       getPreferences(): Promise<{ theme: string; model: string; panelWidth: number }>
       setPreferences(input: { theme: string; model: string }): Promise<void>
+      getReasoningEffort(): Promise<import('../../shared/model-reasoning').ReasoningEffort>
+      setReasoningEffort(value: import('../../shared/model-reasoning').ReasoningEffort): Promise<import('../../shared/model-reasoning').ReasoningEffort>
+      getFastMode(): Promise<boolean>
+      setFastMode(enabled: boolean): Promise<boolean>
       clearVocabulary(): Promise<boolean>
       disconnectChatGPT(): Promise<{ revoked: boolean }>
       openChatGPTUsageSettings(): Promise<void>

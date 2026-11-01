@@ -9,6 +9,7 @@ import { createAuthorization, validateCallback, TOKEN_ENDPOINT, RESOURCE } from 
 import { readCompletedResponse } from './responses'
 import { readIssuedClientId, saveIssuedClientId } from './registration'
 import { createRefreshRequest, mergeRefreshedToken } from './token-refresh'
+import type { ReasoningEffort } from '../../shared/model-reasoning'
 
 const recordSchema = z.object({clientId:z.string(),subject:z.string(),email:z.string(),accessToken:z.string(),refreshToken:z.string().optional(),idToken:z.string(),expiresAt:z.number(),scopes:z.array(z.string())})
 type RecordData = z.infer<typeof recordSchema>
@@ -120,9 +121,11 @@ export class ChatGPTConnection {
     const data=z.object({models:z.array(z.object({slug:z.string(),display_name:z.string(),visibility:z.string()}))}).parse(await response.json())
     return data.models.filter(model=>model.visibility==='list').map(model=>({slug:model.slug,name:model.display_name}))
   }
-  async respond(model:string,input:string,instructions:string,signal?:AbortSignal){
+  async respond(model:string,input:string,instructions:string,signal?:AbortSignal,reasoningEffort?:ReasoningEffort){
     const requestSignal=signal?AbortSignal.any([signal,AbortSignal.timeout(90000)]):AbortSignal.timeout(90000)
-    return readCompletedResponse(await this.request(`${RESOURCE}/responses`,{method:'POST',headers:{Authorization:`Bearer ${await this.accessToken()}`,'Content-Type':'application/json'},body:JSON.stringify({model,input:[{role:'user',content:input}],instructions,store:false,stream:true}),signal:requestSignal}))
+    const payload:Record<string,unknown>={model,input:[{role:'user',content:input}],instructions,store:false,stream:true}
+    if(reasoningEffort)payload.reasoning={effort:reasoningEffort}
+    return readCompletedResponse(await this.request(`${RESOURCE}/responses`,{method:'POST',headers:{Authorization:`Bearer ${await this.accessToken()}`,'Content-Type':'application/json'},body:JSON.stringify(payload),signal:requestSignal}))
   }
   async connect(newRegistration = false) {
     if(this.connecting)throw new Error('Đang có phiên đăng nhập chờ hoàn tất.')

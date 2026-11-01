@@ -69,3 +69,16 @@ test('reply copilot requires all three distinct styles with explanations',async(
   await expect(runLocalAi('reply','Cảm ơn anh.','local',async()=>JSON.stringify({...valid,replies:[valid.replies[0],valid.replies[1],valid.replies[1]]}))).rejects.toThrow()
   await expect(runLocalAi('reply','Cảm ơn anh.','local',async()=>JSON.stringify({...valid,replies:valid.replies.map(({explanation,...reply})=>reply)}))).rejects.toThrow()
 })
+
+test('chat reply copilot accepts visible conversation context and an optional intent',async()=>{
+  const valid={replies:[
+    {style:'simple',english:'Yes, that is the form I meant. Thank you!',vietnamese:'Đúng rồi, đó là biểu mẫu tôi muốn nói đến. Cảm ơn bạn!',explanation:'Xác nhận trực tiếp và lịch sự.'},
+    {style:'professional',english:'Yes, this is the form I was referring to. Thank you for checking.',vietnamese:'Đúng vậy, đây là biểu mẫu tôi đang nhắc đến. Cảm ơn bạn đã kiểm tra.',explanation:'Lịch sự, rõ ràng trong môi trường công việc.'},
+    {style:'friendly',english:'Yes, that’s the one! Thanks for checking.',vietnamese:'Đúng rồi, chính là biểu mẫu đó! Cảm ơn bạn đã kiểm tra nhé.',explanation:'Thân thiện và tự nhiên.'},
+  ]}
+  const input=JSON.stringify({messages:[{side:'left',text:'Is this the form you mean?'}],intent:'Xác nhận đúng rồi'})
+  let instructions=''
+  await expect(runLocalAi('replyFromChat',input,'local',async(_model,_input,prompt)=>{instructions=prompt;return JSON.stringify(valid)})).resolves.toMatchObject({replies:valid.replies})
+  expect(instructions).toContain('most recent visible chat context')
+  await expect(runLocalAi('replyFromChat',JSON.stringify({messages:[]}), 'local',async()=>JSON.stringify(valid))).rejects.toThrow()
+})

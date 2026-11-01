@@ -3,13 +3,46 @@ import { LiveTranslation } from './LiveTranslation'
 import { AiResult } from './AiResult'
 import { ChatGPTAccount } from './ChatGPTAccount'
 import { AdvancedSettings } from './AdvancedSettings'
+import { DEFAULT_CHATGPT_MODEL, DEFAULT_REASONING_EFFORT, isGpt6Model, REASONING_EFFORTS, supportsNoReasoning, type ReasoningEffort } from '../../shared/model-reasoning'
 
 type PanelMode = 'translate' | 'reply' | 'settings'
 type Theme = 'light' | 'dark'
+const reasoningEffortLabels: Record<ReasoningEffort, string> = {
+  none: 'Tắt suy luận (None)',
+  low: 'Thấp (Low)',
+  medium: 'Vừa (Medium)',
+  high: 'Cao (High)',
+  xhigh: 'Rất cao (Extra High)',
+  max: 'Tối đa (Max)',
+}
+type ChatContextMessage = { side: 'left' | 'right' | 'center'; text: string }
+
+function recentChatContext(messages: ChatContextMessage[]) {
+  const selected: ChatContextMessage[] = []
+  let remaining = 9000
+  for (const message of messages.slice(-20).reverse()) {
+    const text = message.text.trim().slice(0, Math.min(2000, remaining - 32))
+    if (!text) continue
+    const candidate = { side: message.side, text }
+    const size = JSON.stringify(candidate).length + 1
+    if (size > remaining) break
+    selected.unshift(candidate)
+    remaining -= size
+  }
+  return selected
+}
+
+function modelLabel(value: string) {
+  if (value === DEFAULT_CHATGPT_MODEL) return 'ChatGPT · GPT-6 Luna'
+  if (value.startsWith('chatgpt:')) return 'ChatGPT · ' + value.slice(8)
+  return value ? 'Ollama · ' + value : 'Chưa chọn mô hình'
+}
 
 export function AiPanel() {
   const [mode, setMode] = useState<PanelMode>('translate')
   const [model, setModel] = useState('')
+  const [reasoningEffort, setReasoningEffort] = useState<ReasoningEffort>(DEFAULT_REASONING_EFFORT)
+  const [fastMode, setFastMode] = useState(false)
   const [models, setModels] = useState<string[]>([])
   const [theme, setTheme] = useState<Theme>('light')
   const [input, setInput] = useState('')
@@ -21,12 +54,15 @@ export function AiPanel() {
 
   useEffect(() => {
     let active = true
-    void window.lingua.getPreferences().then(preferences => {
+    void Promise.all([window.lingua.getPreferences(), window.lingua.getReasoningEffort(), window.lingua.getFastMode()]).then(([preferences, savedEffort, savedFastMode]) => {
       if (!active) return
-      setModel(preferences.model)
+      const selectedModel = preferences.model || DEFAULT_CHATGPT_MODEL
+      setModel(selectedModel)
+      setReasoningEffort(savedEffort)
+      setFastMode(savedFastMode)
       setTheme(preferences.theme as Theme)
       document.documentElement.dataset.theme = preferences.theme
-      if (preferences.model) setModels([preferences.model])
+      setModels([selectedModel])
     }).catch(() => setError('Chưa tải được cài đặt.'))
     return () => { active = false }
   }, [])
@@ -41,6 +77,23 @@ export function AiPanel() {
     setModel(value)
     setError('')
     void window.lingua.setPreferences({ theme, model: value }).catch(() => setError('Không lưu được mô hình AI.'))
+    const slug = value.startsWith('chatgpt:') ? value.slice(8) : ''
+    if (isGpt6Model(slug) && !supportsNoReasoning(slug) && reasoningEffort === 'none') {
+      setReasoningEffort('low')
+      void window.lingua.setReasoningEffort('low').catch(() => setError('Không lưu được mức suy luận.'))
+    }
+  }
+
+  const saveReasoningEffort = (value: ReasoningEffort) => {
+    setReasoningEffort(value)
+    setError('')
+    void window.lingua.setReasoningEffort(value).catch(() => setError('Không lưu được mức suy luận.'))
+  }
+
+  const saveFastMode = (enabled: boolean) => {
+    setFastMode(enabled)
+    setError('')
+    void window.lingua.setFastMode(enabled).catch(() => setError('Không lưu được chế độ tăng tốc.'))
   }
 
   const changeTheme = (next: Theme) => {
@@ -68,7 +121,7 @@ export function AiPanel() {
       if (!values.length) { setError('Tài khoản ChatGPT chưa có mô hình khả dụng.'); return }
       const names = values.map(value => 'chatgpt:' + value.slug)
       setModels(names)
-      saveModel(names[0])
+      saveModel(names.includes(DEFAULT_CHATGPT_MODEL) ? DEFAULT_CHATGPT_MODEL : names[0])
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'Chưa lấy được mô hình ChatGPT. Anh hãy đăng nhập trong Cài đặt.')
     }
@@ -94,6 +147,34 @@ export function AiPanel() {
     }
   }
 
+  const sendContextualReplyRequest = async () => {
+    if (!model || busy) return
+    const generation = ++requestGeneration.current
+    setBusy(true)
+    setError('')
+    setOutput(null)
+    try {
+      if (!(await window.lingua.hasVisibleChatReadAuthorization()) && !(await window.lingua.authorizeVisibleChatRead())) {
+        if (generation === requestGeneration.current) setError('Anh chưa cho phép đọc chữ chat đang hiển thị.')
+        return
+      }
+      const snapshot = await window.lingua.readVisibleChat()
+      const messages = snapshot ? recentChatContext(snapshot.messages) : []
+      if (!messages.length) throw new Error('Chưa thấy tin nhắn trong vùng chat đang hiển thị. Anh mở WhatsApp hoặc Teams rồi thử lại.')
+      if (model.startsWith('chatgpt:') && !(await window.lingua.allowBackgroundCloud())) {
+        if (generation === requestGeneration.current) setError('Anh chưa cho phép gửi chữ chat đang hiển thị đến ChatGPT.')
+        return
+      }
+      const requestId = crypto.randomUUID()
+      const result = await window.lingua.runAi('replyFromChat', JSON.stringify({ messages, intent: input.trim() || undefined }), model, requestId)
+      if (generation === requestGeneration.current) setOutput(result)
+    } catch (failure) {
+      if (generation === requestGeneration.current) setError(failure instanceof Error ? failure.message : 'Chưa tạo được gợi ý từ cuộc trò chuyện. Anh thử lại.')
+    } finally {
+      if (generation === requestGeneration.current) setBusy(false)
+    }
+  }
+
   return <div className="assistant-shell">
     <div className="assistant-heading">
       <div>
@@ -114,13 +195,14 @@ export function AiPanel() {
       </div>
 
       {mode === 'reply' && <div className="reply-view">
-        <p className="helper-text">Anh viết ý muốn trả lời bằng tiếng Việt. AI sẽ đề xuất ba cách nói tiếng Anh.</p>
-        <label htmlFor="reply-input">Nội dung anh muốn trả lời</label>
-        <textarea id="reply-input" value={input} maxLength={12000} onChange={event => { setInput(event.target.value); setOutput(null); requestGeneration.current++ }} placeholder="Ví dụ: Tôi sẽ kiểm tra lại và phản hồi vào sáng mai." />
+        <p className="helper-text">AI đọc các tin nhắn đang hiển thị để gợi ý cách trả lời bằng tiếng Anh. Anh có thể thêm ý riêng hoặc để trống.</p>
+        <label htmlFor="reply-input">Ý anh muốn bổ sung (không bắt buộc)</label>
+        <textarea id="reply-input" value={input} maxLength={2000} onChange={event => { setInput(event.target.value); setOutput(null); requestGeneration.current++; setBusy(false) }} placeholder="Ví dụ: Tôi sẽ kiểm tra lại và phản hồi vào sáng mai." />
         {!model && <p className="helper-text">Anh hãy chọn dịch vụ AI trong phần Cài đặt.</p>}
-        <button type="button" className="primary-button" disabled={!input.trim() || !model || busy} onClick={() => void sendReplyRequest()}>{busy ? 'Đang tạo gợi ý…' : 'Gợi ý câu trả lời'}</button>
+        <button type="button" className="primary-button" disabled={!model || busy} onClick={() => void sendContextualReplyRequest()}>{busy ? 'Đang đọc chat và tạo gợi ý…' : 'Đọc chat & gợi ý trả lời'}</button>
+        {input.trim() && <button type="button" className="secondary-button reply-manual-button" disabled={!model || busy} onClick={() => void sendReplyRequest()}>Chỉ dùng ý tôi nhập</button>}
         {output !== null && <div className="reply-results"><AiResult result={output} /></div>}
-        <p className="helper-text">Ứng dụng chỉ gợi ý. Anh tự quyết định nội dung và gửi tin nhắn.</p>
+        <p className="helper-text">Chỉ lấy chữ trong các tin đang hiển thị. Ứng dụng không tự gửi tin nhắn; anh xem và tự chọn câu trả lời.</p>
       </div>}
 
       {mode === 'settings' && <div className="settings-view">
@@ -135,10 +217,19 @@ export function AiPanel() {
           <label htmlFor="model-choice">Mô hình AI đang sử dụng</label>
           <select id="model-choice" value={model} onChange={event => saveModel(event.target.value)}>
             <option value="">Chưa chọn mô hình</option>
-            {models.includes(model) || !model ? null : <option value={model}>{model}</option>}
-            {models.map(name => <option key={name} value={name}>{name.startsWith('chatgpt:') ? 'ChatGPT · ' + name.slice(8) : 'Ollama · ' + name}</option>)}
+            {models.includes(model) || !model ? null : <option value={model}>{modelLabel(model)}</option>}
+            {models.map(name => <option key={name} value={name}>{modelLabel(name)}</option>)}
           </select>
-          <p className="helper-text">Đang chọn: {model ? model.startsWith('chatgpt:') ? 'ChatGPT' : 'Ollama trên máy' : 'Chưa có dịch vụ AI'}</p>
+          <p className="helper-text">Đang chọn: {modelLabel(model)}{model.startsWith('chatgpt:') && isGpt6Model(model.slice(8)) ? ` · ${reasoningEffortLabels[reasoningEffort]}` : ''}</p>
+          {model.startsWith('chatgpt:') && isGpt6Model(model.slice(8)) && <>
+            <label htmlFor="reasoning-effort">Mức suy luận</label>
+            <select id="reasoning-effort" value={reasoningEffort} onChange={event => saveReasoningEffort(event.target.value as ReasoningEffort)}>
+              {REASONING_EFFORTS.filter(effort => effort !== 'none' || supportsNoReasoning(model.slice(8))).map(effort => <option key={effort} value={effort}>{reasoningEffortLabels[effort]}</option>)}
+            </select>
+            <p className="helper-text">Mặc định Max để suy luận kỹ hơn.</p>
+            <label className="checkbox-label"><input type="checkbox" checked={fastMode} onChange={event => saveFastMode(event.target.checked)} /> Ưu tiên tốc độ</label>
+            <p className="helper-text">Khi bật, yêu cầu dùng mức Low để ưu tiên tốc độ. Tắt để quay lại mức {reasoningEffortLabels[reasoningEffort]}.</p>
+          </>}
         </div>
         <div className="settings-group">
           <h4>Tài khoản ChatGPT</h4>

@@ -10,7 +10,13 @@ LinguaHub mở WhatsApp Web hoặc Microsoft Teams Web trong cửa sổ riêng v
 4. Nếu dùng ChatGPT, xác nhận thêm việc gửi chữ tin nhắn hiển thị đến OpenAI. Ollama không gửi nội dung ra khỏi máy.
 5. LinguaHub đọc các bong bóng tin nhắn đang hiển thị qua DOM của trang, tự phát hiện tiếng Anh, dịch sang tiếng Việt và bỏ qua tin không phải tiếng Anh. **Không chụp màn hình, không dùng OCR và không đọc chat đang ẩn.** Có thể mở mục “Cách đọc tin nhắn” để xem chữ đã đọc hoặc nhấn **Tạm dừng**.
 
-Bản cài Windows x64 vừa build: `release/LinguaHub-AI-Pro-Setup.exe`; SHA-256 `52c56e87a5d374577160b263099162478a51073ae2645d57b26c73468809910f`.
+## Gợi ý trả lời theo cuộc trò chuyện
+
+Trong **Gợi ý trả lời**, nhấn **Đọc chat & gợi ý trả lời** để tạo ba cách trả lời dựa trên các tin đang hiển thị. Có thể thêm ý muốn nói bằng tiếng Việt hoặc để trống để AI tự đề xuất theo ngữ cảnh. LinguaHub chỉ đưa bản nháp, không tự gửi. ChatGPT cần quyền đọc cục bộ và quyền gửi chữ chat hiển thị riêng; Ollama xử lý trên máy.
+
+Trong Cài đặt, model mặc định là **GPT-6 Luna** với mức suy luận **Max**. Bật **Ưu tiên tốc độ** để gửi yêu cầu ở mức **Low**; khi tắt, app quay lại mức suy luận đã chọn.
+
+Bản cài Windows x64 vừa build: `release/LinguaHub-AI-Pro-Setup.exe`; SHA-256 `81513632f6b8f23c6eba9e704b0d0efb4b2b0260b058fe67e1c3574c1690a682`.
 
 Trang web có thể thay đổi cấu trúc DOM; tin nhắn đang tải lười hoặc chưa được dựng trong giao diện không được đọc. Hiện chưa xác nhận end-to-end trên trang WhatsApp/Teams trực tiếp sau thay đổi adapter.
 

@@ -12,6 +12,8 @@ describe('ChatGPT cloud consent scopes', () => {
 
   test('each consent permits only its intended class of task', () => {
     expect(hasCloudConsentForTask('translateMessages', false, true)).toBe(true)
+    expect(hasCloudConsentForTask('replyFromChat', false, true)).toBe(true)
+    expect(hasCloudConsentForTask('replyFromChat', true, false)).toBe(false)
     expect(hasCloudConsentForTask('translate', true, false)).toBe(true)
   })
 })
