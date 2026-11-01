@@ -148,3 +148,52 @@ test('clearLocalData reports when remote revocation cannot be confirmed',async()
   expect(request).not.toHaveBeenCalled()
   await expect(readFile(join(directory,'chatgpt.enc'))).rejects.toMatchObject({code:'ENOENT'})
 })
+
+
+test('fresh workspace registration does not reuse an issued client and preserves the old ChatGPT session on failure',async()=>{
+  const authorizeUrls:URL[]=[]
+  openExternal.mockImplementation(async(href:string)=>{
+    const authorizeUrl=new URL(href)
+    authorizeUrls.push(authorizeUrl)
+    const callback=new URL(authorizeUrl.searchParams.get('redirect_uri')!)
+    const parameters=new URLSearchParams({
+      code:'new-registration-code',
+      client_id:'oaiapp_different_workspace',
+      state:authorizeUrl.searchParams.get('state')!,
+    })
+    await fetch(callback.toString()+'?'+parameters.toString())
+  })
+  const request=vi.fn(async()=>new Response(JSON.stringify({error:'invalid_grant'}),{status:400}))
+  const connection=new ChatGPTConnection(directory,request as typeof fetch)
+  await connection.initialize()
+  await expect(connection.connect(true)).rejects.toThrow('400')
+  expect(authorizeUrls).toHaveLength(1)
+  expect(authorizeUrls[0].searchParams.get('client_id')).toBe('dynamic_agent_client')
+  expect(authorizeUrls[0].searchParams.get('agent_name_hint')).toBe('LinguaHub AI Pro')
+  expect(authorizeUrls[0].searchParams.has('id_token_hint')).toBe(false)
+  expect(authorizeUrls[0].searchParams.has('login_hint')).toBe(false)
+  expect(connection.status()).toMatchObject({connected:true,email:'user@example.com',usageEnabled:true})
+  const kept=JSON.parse((await readFile(join(directory,'chatgpt.enc'))).toString('utf8'))
+  expect(kept.clientId).toBe('oaiapp_issued')
+  expect(kept.accessToken).toBe('old-access')
+  expect(await readFile(join(directory,'chatgpt-registration.json'),'utf8')).toContain('oaiapp_issued')
+})
+
+test('routine reauthorization reuses the saved account and its workspace registration',async()=>{
+  let authorizeUrl:URL|undefined
+  openExternal.mockImplementation(async(href:string)=>{
+    authorizeUrl=new URL(href)
+    const callback=new URL(authorizeUrl.searchParams.get('redirect_uri')!)
+    const parameters=new URLSearchParams({
+      code:'expired-code',
+      state:authorizeUrl.searchParams.get('state')!,
+    })
+    await fetch(callback.toString()+'?'+parameters.toString())
+  })
+  const connection=new ChatGPTConnection(directory,vi.fn(async()=>new Response('',{status:400})) as typeof fetch)
+  await connection.initialize()
+  await expect(connection.connect()).rejects.toThrow('400')
+  expect(authorizeUrl?.searchParams.get('client_id')).toBe('oaiapp_issued')
+  expect(authorizeUrl?.searchParams.get('id_token_hint')).toBe('old-id')
+  expect(authorizeUrl?.searchParams.get('login_hint')).toBe('user@example.com')
+})
