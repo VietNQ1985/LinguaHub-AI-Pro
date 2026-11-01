@@ -41,6 +41,31 @@ test('reads Teams message body nodes from the visible chat pane', () => {
   dom.window.close()
 })
 
+test('reads visible Teams v2 message-pane bubbles and excludes sender metadata', () => {
+  const { dom, result } = runPageScript(`
+    <header data-tid="chat-pane-header">Project chat</header>
+    <div data-tid="message-pane-list-viewport">
+      <div data-tid="chat-pane-item">
+        <div data-tid="chat-pane-message">
+          <span data-tid="message-author-name">Alex</span>
+          <span dir="auto">Could you review the latest draft?</span>
+        </div>
+      </div>
+      <div data-tid="chat-pane-item">
+        <div data-tid="chat-pane-message" data-hidden="true">
+          <span data-tid="message-author-name">Taylor</span>
+          <span dir="auto">Hidden message text</span>
+        </div>
+      </div>
+    </div>
+    <div data-tid="chat-list">Other conversation preview</div>`, 'teams')
+
+  expect(result.messages).toEqual([{ text: 'Could you review the latest draft?', side: 'center' }])
+  expect(JSON.stringify(result)).not.toContain('Other conversation preview')
+  expect(JSON.stringify(result)).not.toContain('Alex')
+  dom.window.close()
+})
+
 test('limits page-side read script to supported chat services', () => {
   expect(buildVisibleChatReadScript('teams')).toContain('teams')
   expect(buildVisibleChatReadScript('whatsapp')).toContain('whatsapp')

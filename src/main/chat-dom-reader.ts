@@ -32,7 +32,7 @@ function readVisibleChatPage(service: ChatService): ChatDomSnapshot {
 
   const root = service === 'whatsapp'
     ? first(['#main [data-testid="conversation-panel-messages"]', '#main [aria-label*="message list" i]', '#main'])
-    : first(['[data-tid="chat-pane-messageList"]', '[data-tid="chat-pane-message-list"]', '[role="log"]', '[data-tid="chat-pane"]'])
+    : first(['[data-tid="message-pane-list-viewport"]', '[data-tid="message-pane-body"]', '[data-tid="chat-pane-messageList"]', '[data-tid="chat-pane-message-list"]', '[role="log"]', '[data-tid="chat-pane"]'])
 
   if (!root) return { conversationHint: '', messages: [] }
   const clip = root instanceof Element ? root.getBoundingClientRect() : undefined
