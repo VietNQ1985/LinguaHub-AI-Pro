@@ -68,6 +68,7 @@ app.whenReady().then(async () => {
   const aiRequests = new Map<string, AbortController>()
   await chatgpt.initialize()
   const learning = await createLearningStore(app.getPath('userData'), app.isPackaged ? join(process.resourcesPath, 'sql-wasm.wasm') : join(app.getAppPath(), 'node_modules/sql.js/dist/sql-wasm.wasm'))
+  cloudConsent=learning.getManualCloudConsent()
   workspacePanelWidth=learning.getPreferences().panelWidth
   if(learning.getPreferences().model.startsWith('chatgpt:')&&chatgpt.status().usageEnabled)void chatgpt.listModels().catch(()=>{})
   const notificationPermissions = await learning.getNotificationPreferences()
@@ -201,9 +202,12 @@ app.whenReady().then(async () => {
   ipcMain.handle('chatgpt:status',event=>{trusted(event);return chatgpt.status()})
   ipcMain.handle('chatgpt:cloud-consent',async event=>{
     trusted(event)
-    const answer=await dialog.showMessageBox(window,{type:'question',title:'Xử lý nội dung bằng ChatGPT',message:'Cho phép gửi nội dung anh chủ động nhập đến OpenAI để xử lý?',detail:'Dùng quyền gói ChatGPT đã cấp. Quyền này chỉ áp dụng trong lần chạy app hiện tại và chỉ cho nội dung nhập tay; dịch tin nhắn hiển thị cần xác nhận riêng.',buttons:['Hủy','Cho phép'],defaultId:0,cancelId:0})
-    cloudConsent=answer.response===1
-    return cloudConsent
+    if(cloudConsent)return true
+    const answer=await dialog.showMessageBox(window,{type:'question',title:'Xử lý nội dung bằng ChatGPT',message:'Cho phép gửi nội dung anh chủ động nhập đến OpenAI để xử lý?',detail:'Dùng quyền gói ChatGPT đã cấp. Nếu cho phép, lựa chọn được lưu trên máy này cho các lần mở app sau đến khi anh ngắt kết nối, đổi tài khoản ChatGPT hoặc xóa dữ liệu LinguaHub. Chỉ áp dụng nội dung anh chủ động nhập; dịch tin nhắn hiển thị cần xác nhận riêng.',buttons:['Hủy','Cho phép'],defaultId:0,cancelId:0})
+    if(answer.response!==1)return false
+    await learning.setManualCloudConsent(true)
+    cloudConsent=true
+    return true
   })
   ipcMain.handle('chatgpt:background-cloud-consent',async event=>{
     trusted(event)
@@ -212,7 +216,7 @@ app.whenReady().then(async () => {
     backgroundCloudConsent=answer.response===1
     return backgroundCloudConsent
   })
-  ipcMain.handle('chatgpt:disconnect',event=>{trusted(event);cloudConsent=false;backgroundCloudConsent=false;return chatgpt.disconnect()})
+  ipcMain.handle('chatgpt:disconnect',async event=>{trusted(event);await learning.setManualCloudConsent(false);cloudConsent=false;backgroundCloudConsent=false;return chatgpt.disconnect()})
   ipcMain.handle('chatgpt:models',event=>{trusted(event);return chatgpt.listModels()})
   ipcMain.handle('chatgpt:usage-settings',event=>{trusted(event);return shell.openExternal('https://chatgpt.com/settings/usage')})
   ipcMain.handle('chatgpt:connect',event=>{trusted(event);return chatgpt.connect()})
@@ -226,6 +230,9 @@ app.whenReady().then(async () => {
       buttons:['Hủy','Tiếp tục đăng nhập'],defaultId:0,cancelId:0,
     })
     if(answer.response!==1)return null
+    await learning.setManualCloudConsent(false)
+    cloudConsent=false
+    backgroundCloudConsent=false
     return chatgpt.connect(true)
   })
   ipcMain.handle('preferences:get', event => { trusted(event); return learning.getPreferences() })

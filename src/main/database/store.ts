@@ -39,6 +39,10 @@ export async function createLearningStore(directory: string, wasmPath: string) {
     const values = Object.fromEntries(rows.map(row => [row.key, row.value]))
     return { whatsapp: values['notifications.whatsapp'] === 'true', teams: values['notifications.teams'] === 'true' }
   }
+  const getManualCloudConsent = () => {
+    ensureHealthy()
+    return db.select().from(appSettings).where(eq(appSettings.key,'chatgpt.manualCloudConsent')).get()?.value === 'true'
+  }
   const readRetentionDays = () => {
     const value=db.select().from(appSettings).all().find(row=>row.key==='privacy.retentionDays')?.value
     const days=Number(value)
@@ -92,6 +96,15 @@ export async function createLearningStore(directory: string, wasmPath: string) {
   await persist()
   return {
     getNotificationPreferences,
+    getManualCloudConsent,
+    async setManualCloudConsent(input:unknown){
+      ensureHealthy()
+      const enabled=z.boolean().parse(input)
+      const key='chatgpt.manualCloudConsent'
+      db.insert(appSettings).values({key,value:String(enabled)}).onConflictDoUpdate({target:appSettings.key,set:{value:String(enabled)}}).run()
+      await persist()
+      return enabled
+    },
     getRetentionDays:readRetentionDays,
     async setRetentionDays(input:unknown){
       ensureHealthy()
