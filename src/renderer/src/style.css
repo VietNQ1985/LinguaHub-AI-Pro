@@ -103,13 +103,6 @@ h2, h3, h4 { color: var(--text); }
 .assistant-heading { padding: 22px 22px 12px; }
 .assistant-heading h2 { margin: 0; font-size: 20px; letter-spacing: -.4px; font-weight: 700; }
 .assistant-heading p { margin-top: 4px; color: var(--muted); font-size: 13px; }
-.assistant-tabs { display: flex; padding: 0 16px; gap: 6px; border-bottom: 1px solid var(--border); }
-.assistant-tabs button {
-  flex: 1; background: transparent; color: var(--muted); border: 0;
-  border-bottom: 2px solid transparent; padding: 12px 8px; font-size: 14px; font-weight: 600;
-}
-.assistant-tabs button:hover { color: var(--text); }
-.assistant-tabs button.selected { color: var(--accent); border-bottom-color: var(--accent); }
 .assistant-content { min-width: 0; }
 .assistant-error { margin: 12px 16px; padding: 11px; border-radius: 8px; color: var(--error); background: var(--soft); font-size: 13px; overflow-wrap: anywhere; }
 .live-translation { padding: 14px 12px 22px; }
@@ -149,7 +142,10 @@ h2, h3, h4 { color: var(--text); }
 .visible-chat-settings { padding-top: 16px; margin-top: 18px; border-top: 1px solid var(--border); }
 .visible-chat-settings p { font-size: 13px; margin: 12px 0; color: var(--muted); }
 .visible-chat-settings pre { white-space: pre-wrap; font-size: 12px; overflow-wrap: anywhere; }
-.reply-view, .settings-view { padding: 18px 16px 28px; }
+.reply-suggestions { margin: 0 12px 24px; border-top: 1px solid var(--border); }
+.reply-suggestions > summary { cursor: pointer; color: var(--text); font-size: 14px; font-weight: 600; padding: 15px 0; }
+.reply-view { padding: 0 0 14px; }
+.settings-view { padding: 18px 16px 28px; }
 .helper-text { color: var(--muted); font-size: 13px; margin: 9px 0 16px; }
 .reply-view label, .settings-view label { display: block; color: var(--text); font-size: 14px; font-weight: 600; margin: 12px 0 7px; }
 .reply-view textarea, .settings-view select {

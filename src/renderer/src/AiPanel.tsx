@@ -5,7 +5,7 @@ import { ChatGPTAccount } from './ChatGPTAccount'
 import { AdvancedSettings } from './AdvancedSettings'
 import { DEFAULT_CHATGPT_MODEL, DEFAULT_REASONING_EFFORT, DEFAULT_TRANSLATION_REASONING_EFFORT, isGpt6Model, REASONING_EFFORTS, type ReasoningEffort } from '../../shared/model-reasoning'
 
-type PanelMode = 'translate' | 'reply' | 'settings'
+type PanelMode = 'translate' | 'settings'
 type Theme = 'light' | 'dark'
 const reasoningEffortLabels: Record<ReasoningEffort, string> = {
   none: 'Tắt suy luận (None)',
@@ -193,27 +193,24 @@ export function AiPanel() {
       </div>
     </div>
 
-    <div className="assistant-tabs" role="tablist" aria-label="Chức năng trợ lý">
-      <button type="button" role="tab" aria-selected={mode === 'translate'} className={mode === 'translate' ? 'selected' : ''} onClick={() => setMode('translate')}>Dịch tự động</button>
-      <button type="button" role="tab" aria-selected={mode === 'reply'} className={mode === 'reply' ? 'selected' : ''} onClick={() => setMode('reply')}>Gợi ý trả lời</button>
-    </div>
-
     <div className="assistant-content">
       {/* Keep the translation component mounted: changing tabs or hiding the panel must not stop visible chat reading. */}
       <div style={{ display: mode === 'translate' ? 'block' : 'none' }} aria-hidden={mode !== 'translate'}>
         <LiveTranslation model={model} />
+        <details className="reply-suggestions">
+          <summary>Gợi ý trả lời</summary>
+          <div className="reply-view">
+            <p className="helper-text">AI đọc các tin nhắn đang hiển thị để gợi ý cách trả lời bằng tiếng Anh. Anh có thể thêm ý riêng hoặc để trống.</p>
+            <label htmlFor="reply-input">Ý anh muốn bổ sung (không bắt buộc)</label>
+            <textarea id="reply-input" value={input} maxLength={2000} onChange={event => { setInput(event.target.value); setOutput(null); requestGeneration.current++; setBusy(false) }} placeholder="Ví dụ: Tôi sẽ kiểm tra lại và phản hồi vào sáng mai." />
+            {!model && <p className="helper-text">Anh hãy chọn dịch vụ AI trong phần Cài đặt.</p>}
+            <button type="button" className="primary-button" disabled={!model || busy} onClick={() => void sendContextualReplyRequest()}>{busy ? 'Đang đọc chat và tạo gợi ý…' : 'Đọc chat & gợi ý trả lời'}</button>
+            {input.trim() && <button type="button" className="secondary-button reply-manual-button" disabled={!model || busy} onClick={() => void sendReplyRequest()}>Chỉ dùng ý tôi nhập</button>}
+            {output !== null && <div className="reply-results"><AiResult result={output} /></div>}
+            <p className="helper-text">Chỉ lấy chữ trong các tin đang hiển thị. Ứng dụng không tự gửi tin nhắn; anh xem và tự chọn câu trả lời.</p>
+          </div>
+        </details>
       </div>
-
-      {mode === 'reply' && <div className="reply-view">
-        <p className="helper-text">AI đọc các tin nhắn đang hiển thị để gợi ý cách trả lời bằng tiếng Anh. Anh có thể thêm ý riêng hoặc để trống.</p>
-        <label htmlFor="reply-input">Ý anh muốn bổ sung (không bắt buộc)</label>
-        <textarea id="reply-input" value={input} maxLength={2000} onChange={event => { setInput(event.target.value); setOutput(null); requestGeneration.current++; setBusy(false) }} placeholder="Ví dụ: Tôi sẽ kiểm tra lại và phản hồi vào sáng mai." />
-        {!model && <p className="helper-text">Anh hãy chọn dịch vụ AI trong phần Cài đặt.</p>}
-        <button type="button" className="primary-button" disabled={!model || busy} onClick={() => void sendContextualReplyRequest()}>{busy ? 'Đang đọc chat và tạo gợi ý…' : 'Đọc chat & gợi ý trả lời'}</button>
-        {input.trim() && <button type="button" className="secondary-button reply-manual-button" disabled={!model || busy} onClick={() => void sendReplyRequest()}>Chỉ dùng ý tôi nhập</button>}
-        {output !== null && <div className="reply-results"><AiResult result={output} /></div>}
-        <p className="helper-text">Chỉ lấy chữ trong các tin đang hiển thị. Ứng dụng không tự gửi tin nhắn; anh xem và tự chọn câu trả lời.</p>
-      </div>}
 
       {mode === 'settings' && <div className="settings-view">
         <div className="settings-title"><h3>Cài đặt</h3><button type="button" onClick={() => setMode('translate')}>← Quay lại bản dịch</button></div>

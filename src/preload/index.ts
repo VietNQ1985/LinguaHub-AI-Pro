@@ -43,6 +43,7 @@ contextBridge.exposeInMainWorld('lingua', {
     return ()=>ipcRenderer.removeListener('chat:visible-changed',listener)
   },
   listModels: () => ipcRenderer.invoke('ai:models'),
+  writeClipboardText: (text:string) => ipcRenderer.invoke('clipboard:write-text',text),
   runAi: (task: string, text: string, model: string, requestId?: string) => ipcRenderer.invoke('ai:run', task, text, model, requestId),
   onAiStream: (requestId:string,callback:(delta:string)=>void) => {
     const listener=(_event:Electron.IpcRendererEvent,message:{requestId:string;delta:string})=>{if(message.requestId===requestId&&typeof message.delta==='string')callback(message.delta)}

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, WebContentsView, ipcMain, shell, Notification, dialog } from 'electron'
+import { app, BrowserWindow, WebContentsView, ipcMain, shell, Notification, dialog, clipboard } from 'electron'
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -140,6 +140,12 @@ app.whenReady().then(async () => {
     try{const result=await dialog.showMessageBox(window,{type:'question',message:'Cho phép microphone để luyện nói?',detail:'Thu âm cục bộ, tối đa 60 giây. Không gửi bản thu đến AI.',buttons:['Hủy','Cho phép'],defaultId:0,cancelId:0});microphoneAllowed=result.response===1;callback(microphoneAllowed)}catch{callback(false)}
   })
   const trusted = (event: Electron.IpcMainInvokeEvent) => { if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error('Untrusted sender') }
+  ipcMain.handle('clipboard:write-text',(event,value:unknown)=>{
+    trusted(event)
+    if(typeof value!=='string'||value.length>50000)throw new Error('Nội dung sao chép không hợp lệ.')
+    clipboard.writeText(value)
+    return true
+  })
   ipcMain.handle('workspace:reload',async event=>{
     trusted(event)
     if(!view || view.webContents.isDestroyed())throw new Error('Anh mở workspace trước.')

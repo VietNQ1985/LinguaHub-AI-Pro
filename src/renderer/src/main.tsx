@@ -49,6 +49,7 @@ declare global {
       connectChatGPTNewWorkspace(): Promise<{ connected: boolean; email: string | null; usageEnabled: boolean } | null>
       chatgptStatus(): Promise<{ connected: boolean; email: string | null; usageEnabled: boolean }>
       listModels(): Promise<string[]>
+      writeClipboardText(text: string): Promise<boolean>
       runAi(task: string, text: string, model: string, requestId?: string): Promise<unknown>
       onAiStream(requestId: string, callback: (delta: string) => void): () => void
       cancelAi(requestId: string): Promise<boolean>
