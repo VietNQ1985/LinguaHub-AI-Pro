@@ -34,6 +34,23 @@ test('returns a stable WhatsApp bubble id when the page supplies one',()=>{
   dom.window.close()
 })
 
+test('reads a new WhatsApp bubble using another supported selector when older bubbles match the first selector',()=>{
+  const {dom,result}=runPageScript(`
+    <main id="main">
+      <header><span>Chat header</span></header>
+      <div data-testid="conversation-panel-messages">
+        <div data-pre-plain-text="[10:00] Alice:"><span class="selectable-text">Earlier visible message.</span></div>
+        <div data-testid="msg-container" class="message-in" data-id="wamid-new"><span class="selectable-text">New message in another markup shape.</span></div>
+      </div>
+    </main>`, 'whatsapp')
+
+  expect(result.messages).toEqual([
+    {text:'Earlier visible message.',side:'center'},
+    {text:'New message in another markup shape.',side:'left',id:'wamid-new'},
+  ])
+  dom.window.close()
+})
+
 test('keeps the conversation identity stable when only the contact presence changes',()=>{
   const first=runPageScript('<main id="main"><header><span>Vinh Luong</span><span>online recently</span></header><div data-testid="conversation-panel-messages"></div></main>','whatsapp')
   const second=runPageScript('<main id="main"><header><span>Vinh Luong</span><span>last seen today at 18:10</span></header><div data-testid="conversation-panel-messages"></div></main>','whatsapp')

@@ -39,11 +39,8 @@ function readVisibleChatPage(service: ChatService): ChatDomSnapshot {
   const bubbleSelectors = service === 'whatsapp'
     ? ['[data-pre-plain-text]', '[data-id].message-in, [data-id].message-out', '[data-testid*="msg-container"]']
     : ['[data-tid="chat-pane-message"]', '[data-tid="message"]', '[data-message-id]', '[role="listitem"]']
-  let bubbles: Element[] = []
-  for (const selector of bubbleSelectors) {
-    bubbles = Array.from(root.querySelectorAll(selector)).filter(element => visibleWithin(element, clip))
-    if (bubbles.length) break
-  }
+  let bubbles = Array.from(root.querySelectorAll(bubbleSelectors.join(',')))
+    .filter(element => visibleWithin(element, clip))
 
   // Keep outer message bubbles only; nested Teams content containers can match the same selectors.
   bubbles = bubbles.filter(element => !bubbles.some(other => other !== element && other.contains(element)))
