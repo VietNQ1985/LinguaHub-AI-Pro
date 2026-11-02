@@ -1,33 +1,76 @@
 # SignalDesk
 
-SignalDesk is a standalone Windows desktop workspace prototype with internal chat, contacts, tasks, Zalo, unified inbox, AI bots, notifications, and settings.
+SignalDesk is a standalone Windows desktop workspace prototype. Its current data model supports local conversations, contacts, tasks, bot profiles, notices, preferences, and a separate Zalo Web window.
 
-## Start
+## Install and run
 
-This folder uses the React, Vite, Electron, and Lucide packages already installed in the parent workspace.
+Use Node.js 24 or later, then run these commands from this directory:
 
 ```powershell
+npm ci
+npm run typecheck
+npm test
 npm run build
 npm run desktop
 ```
 
-For web development, run `npm run dev`. In a second terminal, start Electron with the development URL:
+For Vite development, keep the server and Electron in separate terminals:
+
+```powershell
+npm run dev
+```
 
 ```powershell
 $env:SIGNALDESK_DEV_URL = 'http://127.0.0.1:5173'
 npm run desktop
 ```
 
-To create a Windows installer, run `npm run dist`.
+Build the Windows x64 NSIS installer with:
 
-## Prototype behavior
+```powershell
+npm run dist
+```
 
-- Navigation between the eight workspace areas is active.
-- Chat, contacts, tasks, AI bot toggles, notices, and appearance preferences are stored in the local application profile.
-- New contacts, conversations, tasks, and bots can be added from the interface.
-- Messages typed in Chat or Inbox stay in this local prototype.
-- Zalo Web opens in a separate SignalDesk window with a persistent app session for personal-account login.
-- Zalo messages are not synchronized into SignalDesk's internal Inbox.
-- Zalo chat synchronization, calls, file upload, server data, and AI services are not connected.
+The installer is written to `release/`. Electron Builder packages the renderer and both Electron files. Uninstall is configured to keep the application's user data.
 
-This prototype uses fictional sample data and a separate SignalDesk identity. It does not connect to any organization's live services or reuse account data.
+## Local data and migration
+
+- Existing `signaldesk.*` local-storage entries are read without removal and migrated to versioned `signaldesk.v2.*` entries.
+- Stored collections are checked and repaired record by record. If a saved value is invalid, it remains untouched until the user makes a change; before replacing it, SignalDesk stores a recovery copy under `signaldesk.recovery.*`.
+- Storage and quota errors are shown in the workspace instead of being ignored.
+- Zalo uses the existing persistent Electron partition `persist:signaldesk-zalo`. Closing its window does not clear its cookies or site data. The explicit reset action asks for confirmation before clearing the partition.
+- The local app shell has a restrictive Content Security Policy and blocks navigation away from its own page. Zalo runs without Node integration, with context isolation and renderer sandboxing; its web session is denied camera, microphone, and notification permissions.
+- The installed app keeps its `local.signaldesk.workspace` app identity and configures uninstall not to delete app data, preserving the existing profile location.
+- The build pins `minimatch` to patched version `11.0.1`; `npm audit` reports no known vulnerabilities in the lockfile.
+
+Back up the app's user-data folder before replacing an installed build if local records or the Zalo session are important. A damaged local-storage value is copied to a recovery key before its next successful save.
+
+## Current behavior and limits
+
+- Chat and Inbox store messages locally; they do not send messages through Zalo, Teams, or WhatsApp.
+- Zalo opens in a separate, sandboxed Electron window. “Đã tải trang” means the page finished loading; it does not confirm account authentication.
+- Zalo messages are not synchronized into SignalDesk Inbox.
+- Bot cards are editable local profiles and do not run AI services.
+- Contacts and tasks support local create, edit, delete, filtering, and status updates.
+- Calls, video, attachments, account sync, and remote backend services are not connected.
+- Opening Zalo requires a network connection and a user-controlled login. A live account login has not been used as an automated test.
+
+## Automated checks
+
+`npm test` uses Node's built-in test runner. It covers versioned storage and recovery behavior, legacy bot/task migration, search/filter/CRUD helpers, and the Zalo window manager's URL restrictions, persistent partition, close behavior, explicit reset, and load errors.
+
+## Manual Windows QA checklist
+
+1. Install over an existing SignalDesk build, open it, and confirm existing conversations, preferences, and bot profiles still appear.
+2. Create, edit, and delete a contact, a task, and a bot profile; restart and confirm the resulting data remains.
+3. Search Chat and Inbox with Vietnamese accents, multiple terms, channel filters, and unread-only filters. Open an unread conversation and confirm its unread count clears.
+4. Change task status, set and clear a due date, and confirm tasks remain in their correct status columns after restart.
+5. Open Zalo, sign in by QR or the method shown by Zalo, close and reopen the Zalo window, and confirm the session remains.
+6. Select “Xóa phiên đã lưu”, cancel once, and confirm the session remains. Confirm the action on a second attempt and verify Zalo requests a new login.
+7. Resize the app to its minimum supported size, collapse and expand the sidebar, switch dark and compact appearance, and confirm controls remain reachable.
+8. Turn Windows notifications on and off, then verify the permission result is reflected in SignalDesk settings.
+9. Uninstall the app and confirm its user-data directory remains. Reinstall and confirm local records and the Zalo session are still available.
+
+This checklist requires a Windows desktop and, for steps 5–6, a Zalo account controlled by the tester. Automated checks do not sign in to a live account.
+
+The generated installer uses Electron Builder's default application icon and is not code signed in this environment.
