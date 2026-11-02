@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { reconcileStreamingMessage } from '../../shared/streaming-reconciliation'
 import { TranslationCache } from '../../shared/translation-cache'
 import { messageIdentityKeys } from '../../shared/message-identity'
 import { maskSensitive } from '../../shared/mask-sensitive'
@@ -27,6 +28,7 @@ export function LiveTranslation({ model }: { model: string }) {
   const conversationId = useRef<string | null>(null)
   const currentBatches = useRef(new Map<'priority' | 'backlog', string>())
   const inFlightMessageKeys = useRef(new Set<string>())
+  const streamingMessages = useRef(new Map<string, VisibleMessage>())
   const failed = useRef(new Set<string>())
   const failureMessages = useRef(new Map<string, string>())
   const latestSnapshot = useRef<{ version: number; messages: VisibleMessage[] } | null>(null)
@@ -61,6 +63,7 @@ export function LiveTranslation({ model }: { model: string }) {
     const ids = [...currentBatches.current.values()]
     currentBatches.current.clear()
     inFlightMessageKeys.current.clear()
+    streamingMessages.current.clear()
     pendingUiTimings.current = []
     pendingFirstPartialUi.current = []
     firstPartialUiByRequest.current.clear()
@@ -154,6 +157,7 @@ export function LiveTranslation({ model }: { model: string }) {
             if (!latest || latest.version !== version) return
             const firstPartial = partialTranslation.length === 0
             partialTranslation = (partialTranslation + delta).slice(0, 6000)
+            streamingMessages.current.set(primary.key, { ...primary, partialTranslation })
             if (firstPartial) pendingFirstPartialUi.current.push({ requestId, startedAt: Date.now() })
             const updated = latest.messages.map(item => item.key === primary.key ? { ...item, partialTranslation } : item)
             latestSnapshot.current = { ...latest, messages: updated }
@@ -232,7 +236,7 @@ export function LiveTranslation({ model }: { model: string }) {
           firstPartialUiByRequest.current.delete(requestId)
           if (currentBatches.current.get(lane) !== requestId) return
           currentBatches.current.delete(lane)
-          for (const item of sourceById.values()) inFlightMessageKeys.current.delete(item.key)
+          for (const item of sourceById.values()) { inFlightMessageKeys.current.delete(item.key); streamingMessages.current.delete(item.key) }
           const latest = latestSnapshot.current
           if (latest && latest.version === conversationVersion.current) {
             const refreshed = latest.messages.map(item => {
@@ -299,6 +303,7 @@ export function LiveTranslation({ model }: { model: string }) {
         for (const key of observations.keys()) if (!observedKeys.has(key)) observations.delete(key)
 
         let nextConfirmDelay = Number.POSITIVE_INFINITY
+        const priorMessages = latestSnapshot.current?.version === currentVersion ? new Map(latestSnapshot.current.messages.map(item => [item.key, item])) : new Map<string, VisibleMessage>()
         const visible = result.messages.map((item, index): VisibleMessage => {
           const key = keys[index]
           const candidate = { key, id: item.id, text: item.text, side: item.side }
@@ -306,6 +311,7 @@ export function LiveTranslation({ model }: { model: string }) {
           const failedKey = failureKey(candidate)
           if (cached) return { ...candidate, status: cached.translation.trim() ? 'translated' : 'not-english', value: cached, failureMessage: undefined }
           if (!activeModel) return { ...candidate, status: model.startsWith('chatgpt:') ? 'waiting-consent' : 'waiting-model' }
+          if (inFlightMessageKeys.current.has(key)) return reconcileStreamingMessage({ ...candidate, status: 'translating' as const }, streamingMessages.current.get(key) || priorMessages.get(key))
           if (failed.current.has(failedKey)) return { ...candidate, status: 'failed', failureMessage: failureMessages.current.get(failedKey) }
           if (item.id) return { ...candidate, status: 'translating', timing: { detectedMs: estimatedDetectionMs, confirmationMs: 0, readyAt: capturedAt, source: trigger.source === 'event' ? 'event' : trigger.source === 'initial' ? 'initial' : 'poll' } }
 
