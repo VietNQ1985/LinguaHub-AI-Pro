@@ -1,8 +1,9 @@
-import { app, BrowserWindow, WebContentsView, ipcMain, shell, Notification, dialog } from 'electron'
+import { app, BrowserWindow, WebContentsView, ipcMain, shell, Notification, dialog, clipboard } from 'electron'
+import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { listLocalModels, runLocalAi, type AiTask } from './ai'
-import { VisibleOcr } from './visible-ocr'
+import { listLocalModels, reasoningEffortForTask, runLocalAi, type AiTask } from './ai'
+import { buildVisibleChatReadScript, type ChatDomSnapshot, type ChatService } from './chat-dom-reader'
 import { createLearningStore } from './database/store'
 import { ChatGPTConnection } from './auth/connection'
 import { maskSensitive } from '../shared/mask-sensitive'
@@ -10,12 +11,13 @@ import { isSafeExternalWebUrl, isWorkspaceUrl } from '../shared/navigation'
 import { diagnostic } from './diagnostics'
 import {restoreWindow,saveWindow} from './window-state'
 import { canShowWorkspaceNotification, isNotificationOrigin, type WorkspaceService } from './notification-policy'
-import { getOcrAssetPaths } from './ocr-assets'
 import { hasCloudConsentForTask } from './cloud-consent'
 import { APP_USER_MODEL_ID, TOAST_ACTIVATOR_CLSID, startMenuShortcutPath, toastShortcutDetails } from './windows-notifications'
-const ocr = new VisibleOcr()
+import { FAST_REASONING_EFFORT, isGpt6Model } from '../shared/model-reasoning'
 let window: BrowserWindow
 let view: WebContentsView | undefined
+let currentWorkspaceService: ChatService = 'whatsapp'
+let chatReadAuthorized = false
 let workspacePanelWidth=360
 let workspacePanelCollapsed=false
 const views = new Map<string, WebContentsView>()
@@ -66,9 +68,16 @@ app.whenReady().then(async () => {
   const aiRequests = new Map<string, AbortController>()
   await chatgpt.initialize()
   const learning = await createLearningStore(app.getPath('userData'), app.isPackaged ? join(process.resourcesPath, 'sql-wasm.wasm') : join(app.getAppPath(), 'node_modules/sql.js/dist/sql-wasm.wasm'))
+  cloudConsent=learning.getManualCloudConsent()
   workspacePanelWidth=learning.getPreferences().panelWidth
+  if(learning.getPreferences().model.startsWith('chatgpt:')&&chatgpt.status().usageEnabled)void chatgpt.listModels().catch(()=>{})
   const notificationPermissions = await learning.getNotificationPreferences()
   const notificationPrompts = new Map<WorkspaceService, Promise<boolean>>()
+  const chatMutationDebounces = new Map<ChatService, {timer:ReturnType<typeof setTimeout>;contents:Electron.WebContents;observedAt:number}>()
+  const clearChatMutationDebounces=()=>{for(const entry of chatMutationDebounces.values())clearTimeout(entry.timer);chatMutationDebounces.clear()}
+  const controlChatObservers=(enabled:boolean,only?:ChatService)=>{
+    for(const [service,child] of views.entries())if((!only||service===only)&&!child.webContents.isDestroyed())child.webContents.send('chat:observer-control',enabled)
+  }
   const grantNotificationPermission = async (service: WorkspaceService) => {
     if (notificationPermissions[service]) return true
     const pending = notificationPrompts.get(service)
@@ -97,8 +106,9 @@ app.whenReady().then(async () => {
   const layoutWorkspaceViews=()=>{
     if(window.isDestroyed())return
     const [width,height]=window.getContentSize()
-    const panelWidth=workspacePanelCollapsed?52:workspacePanelWidth
-    for(const child of views.values())child.setBounds({x:220,y:90,width:Math.max(300,width-220-panelWidth),height:Math.max(100,height-90)})
+    const panelWidth=workspacePanelCollapsed?56:workspacePanelWidth
+    const dividerWidth=workspacePanelCollapsed?0:6
+    for(const child of views.values())child.setBounds({x:0,y:64,width:Math.max(300,width-panelWidth-dividerWidth),height:Math.max(100,height-64)})
   }
   ipcMain.on('workspace:panel-layout',(event,input:unknown)=>{
     if(event.sender!==window.webContents||event.senderFrame!==window.webContents.mainFrame||!input||typeof input!=='object')return
@@ -110,6 +120,20 @@ app.whenReady().then(async () => {
     layoutWorkspaceViews()
     if(value.persist)void learning.setPanelWidth(workspacePanelWidth).catch(()=>{})
   })
+  ipcMain.on('chat:visible-dom-change',(event,rawObservedAt:unknown)=>{
+    const service=[...views.entries()].find(([,child])=>child.webContents===event.sender)?.[0] as ChatService|undefined
+    if(!service||event.senderFrame!==event.sender.mainFrame||!chatReadAuthorized||!window.isVisible()||window.isMinimized()||!view||view.webContents!==event.sender||!view.getVisible()||!isWorkspaceUrl(service,event.sender.getURL()))return
+    const observedAt=typeof rawObservedAt==='number'&&Number.isFinite(rawObservedAt)&&Math.abs(Date.now()-rawObservedAt)<60000?rawObservedAt:Date.now()
+    const previous=chatMutationDebounces.get(service)
+    if(previous)clearTimeout(previous.timer)
+    const contents=event.sender
+    const timer=setTimeout(()=>{
+      chatMutationDebounces.delete(service)
+      if(!chatReadAuthorized||view?.webContents!==contents||!view.getVisible()||!isWorkspaceUrl(service,contents.getURL()))return
+      window.webContents.send('chat:visible-changed',{service,observedAt})
+    },45)
+    chatMutationDebounces.set(service,{timer,contents,observedAt})
+  })
   let microphoneAllowed=false
   window.webContents.session.setPermissionCheckHandler((contents,permission)=>contents===window.webContents && permission==='media' && microphoneAllowed)
   window.webContents.session.setPermissionRequestHandler(async(contents,permission,callback,details)=>{
@@ -117,6 +141,12 @@ app.whenReady().then(async () => {
     try{const result=await dialog.showMessageBox(window,{type:'question',message:'Cho phép microphone để luyện nói?',detail:'Thu âm cục bộ, tối đa 60 giây. Không gửi bản thu đến AI.',buttons:['Hủy','Cho phép'],defaultId:0,cancelId:0});microphoneAllowed=result.response===1;callback(microphoneAllowed)}catch{callback(false)}
   })
   const trusted = (event: Electron.IpcMainInvokeEvent) => { if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error('Untrusted sender') }
+  ipcMain.handle('clipboard:write-text',(event,value:unknown)=>{
+    trusted(event)
+    if(typeof value!=='string'||value.length>50000)throw new Error('Nội dung sao chép không hợp lệ.')
+    clipboard.writeText(value)
+    return true
+  })
   ipcMain.handle('workspace:reload',async event=>{
     trusted(event)
     if(!view || view.webContents.isDestroyed())throw new Error('Anh mở workspace trước.')
@@ -124,8 +154,8 @@ app.whenReady().then(async () => {
     const url=current.webContents.getURL()
     const service=[...views.entries()].find(([,entry])=>entry===current)?.[0]
     if(service!=='whatsapp' && service!=='teams')throw new Error('Workspace không hợp lệ')
-    ocr.invalidate()
     await current.webContents.loadURL(isWorkspaceUrl(service,url)?url:sites[service])
+    if(chatReadAuthorized&&view===current)current.webContents.send('chat:observer-control',true)
     return {title:current.webContents.getTitle()}
   })
   ipcMain.handle('privacy:masking',(event,enabled:unknown)=>{trusted(event);if(typeof enabled!=='boolean')throw new Error('Cài đặt không hợp lệ');masking=enabled})
@@ -146,11 +176,11 @@ app.whenReady().then(async () => {
     if(answer.response!==1)return false
     cloudConsent=false
     backgroundCloudConsent=false
+    chatReadAuthorized=false
     masking=true
     microphoneAllowed=false
     for(const controller of aiRequests.values())controller.abort(new DOMException('Dữ liệu ứng dụng đã được xóa.','AbortError'))
     aiRequests.clear()
-    ocr.stop()
     for(const child of views.values()){
       const serviceSession=child.webContents.session
       window.contentView.removeChildView(child)
@@ -172,23 +202,47 @@ app.whenReady().then(async () => {
   ipcMain.handle('chatgpt:status',event=>{trusted(event);return chatgpt.status()})
   ipcMain.handle('chatgpt:cloud-consent',async event=>{
     trusted(event)
-    const answer=await dialog.showMessageBox(window,{type:'question',title:'Xử lý nội dung bằng ChatGPT',message:'Cho phép gửi nội dung anh chủ động nhập đến OpenAI để xử lý?',detail:'Dùng quyền gói ChatGPT đã cấp. Quyền này chỉ áp dụng trong lần chạy app hiện tại và chỉ cho nội dung nhập tay; dịch OCR nền cần xác nhận riêng. Ảnh OCR không được gửi.',buttons:['Hủy','Cho phép'],defaultId:0,cancelId:0})
-    cloudConsent=answer.response===1
-    return cloudConsent
+    if(cloudConsent)return true
+    const answer=await dialog.showMessageBox(window,{type:'question',title:'Xử lý nội dung bằng ChatGPT',message:'Cho phép gửi nội dung anh chủ động nhập đến OpenAI để xử lý?',detail:'Dùng quyền gói ChatGPT đã cấp. Nếu cho phép, lựa chọn được lưu trên máy này cho các lần mở app sau đến khi anh ngắt kết nối, đổi tài khoản ChatGPT hoặc xóa dữ liệu LinguaHub. Chỉ áp dụng nội dung anh chủ động nhập; dịch tin nhắn hiển thị cần xác nhận riêng.',buttons:['Hủy','Cho phép'],defaultId:0,cancelId:0})
+    if(answer.response!==1)return false
+    await learning.setManualCloudConsent(true)
+    cloudConsent=true
+    return true
   })
   ipcMain.handle('chatgpt:background-cloud-consent',async event=>{
     trusted(event)
     if(backgroundCloudConsent)return true
-    const answer=await dialog.showMessageBox(window,{type:'question',title:'Cho phép dịch OCR nền bằng ChatGPT?',message:'Gửi chữ nhận dạng trong vùng chat đang hiển thị đến OpenAI để dịch tự động?',detail:'Chỉ văn bản OCR được gửi khi dùng model ChatGPT. Ảnh chụp luôn xử lý cục bộ, không tải lên. Nếu bật che email/số điện thoại, app áp dụng trước khi gửi nhưng có thể bỏ sót. Dừng OCR để ngừng gửi chữ. Anh có thể từ chối và dùng Ollama trên máy.',buttons:['Không cho phép','Cho phép gửi chữ OCR'],defaultId:0,cancelId:0})
+    const answer=await dialog.showMessageBox(window,{type:'question',title:'Cho phép dịch tin nhắn hiển thị bằng ChatGPT?',message:'Gửi chữ lấy từ các tin nhắn đang hiển thị trong WhatsApp hoặc Teams đến OpenAI để dịch tự động?',detail:'LinguaHub đọc nội dung chữ từ DOM của trang ngay trên máy. Chỉ chữ của bong bóng tin đang hiển thị được gửi; không gửi ảnh chụp hoặc nội dung chat ẩn. Bật che email/số điện thoại sẽ áp dụng trước khi gửi nhưng có thể bỏ sót. Dừng dịch để ngừng gửi chữ. Anh có thể từ chối và dùng Ollama trên máy.',buttons:['Không cho phép','Cho phép gửi chữ hiển thị'],defaultId:0,cancelId:0})
     backgroundCloudConsent=answer.response===1
     return backgroundCloudConsent
   })
-  ipcMain.handle('chatgpt:disconnect',event=>{trusted(event);cloudConsent=false;backgroundCloudConsent=false;return chatgpt.disconnect()})
+  ipcMain.handle('chatgpt:disconnect',async event=>{trusted(event);await learning.setManualCloudConsent(false);cloudConsent=false;backgroundCloudConsent=false;return chatgpt.disconnect()})
   ipcMain.handle('chatgpt:models',event=>{trusted(event);return chatgpt.listModels()})
   ipcMain.handle('chatgpt:usage-settings',event=>{trusted(event);return shell.openExternal('https://chatgpt.com/settings/usage')})
   ipcMain.handle('chatgpt:connect',event=>{trusted(event);return chatgpt.connect()})
+  ipcMain.handle('chatgpt:connect-new-workspace',async event=>{
+    trusted(event)
+    const answer=await dialog.showMessageBox(window,{
+      type:'question',
+      title:'Đăng nhập bằng tài khoản hoặc không gian làm việc khác',
+      message:'Anh muốn đăng ký kết nối ChatGPT mới?',
+      detail:'OpenAI gắn mỗi đăng ký với tài khoản và không gian làm việc đã chọn. LinguaHub sẽ mở đăng nhập mới, không dùng lại mã đăng ký cũ. Nếu không thành công, kết nối ChatGPT hiện tại vẫn được giữ. Khi thành công, kết nối ChatGPT cũ trong LinguaHub sẽ được thay thế. WhatsApp, Teams và dữ liệu học không bị ảnh hưởng.',
+      buttons:['Hủy','Tiếp tục đăng nhập'],defaultId:0,cancelId:0,
+    })
+    if(answer.response!==1)return null
+    await learning.setManualCloudConsent(false)
+    cloudConsent=false
+    backgroundCloudConsent=false
+    return chatgpt.connect(true)
+  })
   ipcMain.handle('preferences:get', event => { trusted(event); return learning.getPreferences() })
   ipcMain.handle('preferences:set', (event, input) => { trusted(event); return learning.setPreferences(input) })
+  ipcMain.handle('preferences:reasoning-effort:get', event => { trusted(event); return learning.getReasoningEffort() })
+  ipcMain.handle('preferences:reasoning-effort:set', async (event, input) => { trusted(event); return learning.setReasoningEffort(input) })
+  ipcMain.handle('preferences:translation-reasoning-effort:get', event => { trusted(event); return learning.getTranslationReasoningEffort() })
+  ipcMain.handle('preferences:translation-reasoning-effort:set', async (event, input) => { trusted(event); return learning.setTranslationReasoningEffort(input) })
+  ipcMain.handle('preferences:fast-mode:get', event => { trusted(event); return learning.getFastMode() })
+  ipcMain.handle('preferences:fast-mode:set', async (event, enabled) => { trusted(event); return learning.setFastMode(enabled) })
   ipcMain.handle('vocabulary:clear', async event => {
     trusted(event)
     const answer = await dialog.showMessageBox(window, {type:'warning',message:'Xóa toàn bộ từ vựng và lịch ôn trên máy này?',detail:'Thao tác không thể hoàn tác.',buttons:['Hủy','Xóa dữ liệu'],defaultId:0,cancelId:0})
@@ -201,26 +255,56 @@ app.whenReady().then(async () => {
   ipcMain.handle('learning:complete-daily-lesson', event => { trusted(event); return learning.completeDailyLesson() })
   ipcMain.handle('vocabulary:add', (event, input) => { trusted(event); return learning.add(input) })
   ipcMain.handle('vocabulary:review', (event, id, remembered) => { trusted(event); return learning.review(id, remembered) })
-  ipcMain.handle('ocr:authorize', event => { trusted(event); return ocr.authorize(window) })
-  ipcMain.handle('ocr:assets', event => { trusted(event); return getOcrAssetPaths(app.isPackaged, app.getAppPath(), process.resourcesPath) })
-  ipcMain.handle('ocr:stop', event => { trusted(event); ocr.stop(); backgroundCloudConsent=false })
-  ipcMain.handle('ocr:read', (event, leftPercent: number) => { trusted(event); if (window.isMinimized() || !window.isVisible()) return null; return ocr.recognize(view, leftPercent) })
+  ipcMain.handle('chat:authorize-visible-read', async event => {
+    trusted(event)
+    const answer=await dialog.showMessageBox(window,{type:'question',title:'Cho phép đọc chữ trong chat đang hiển thị?',message:'Cho phép LinguaHub đọc cục bộ chữ trong các tin nhắn đang nhìn thấy ở WhatsApp và Teams?',detail:'App đọc chữ từ DOM của trang, không chụp màn hình và không đọc các tin nhắn đang ẩn. Nội dung chỉ gửi đến ChatGPT nếu anh xác nhận quyền cloud riêng; Ollama xử lý trên máy. Anh có thể tạm dừng bất kỳ lúc nào.',buttons:['Hủy','Cho phép đọc chữ'],defaultId:0,cancelId:0})
+    chatReadAuthorized=answer.response===1
+    controlChatObservers(false)
+    if(chatReadAuthorized){
+      const activeService=[...views.entries()].find(([,child])=>child===view)?.[0]
+      if(activeService==='whatsapp'||activeService==='teams')controlChatObservers(true,activeService)
+    }
+    return chatReadAuthorized
+  })
+  ipcMain.handle('chat:visible-read-status', event => { trusted(event); return chatReadAuthorized })
+  ipcMain.handle('chat:stop-visible-read', event => { trusted(event); chatReadAuthorized=false; backgroundCloudConsent=false; clearChatMutationDebounces(); controlChatObservers(false) })
+  ipcMain.handle('chat:read-visible', async event => {
+    trusted(event)
+    if(!chatReadAuthorized)throw new Error('Chưa cho phép đọc chữ chat đang hiển thị.')
+    if(window.isMinimized() || !window.isVisible() || !view || view.webContents.isDestroyed() || !view.getVisible())return null
+    if(currentWorkspaceService!=='whatsapp' && currentWorkspaceService!=='teams')return null
+    const url=view.webContents.getURL()
+    if(!isWorkspaceUrl(currentWorkspaceService,url))return null
+    const snapshot=await view.webContents.executeJavaScript(buildVisibleChatReadScript(currentWorkspaceService)) as ChatDomSnapshot
+    const messages=(Array.isArray(snapshot?.messages)?snapshot.messages:[])
+      .filter(item=>item && typeof item.text==='string' && item.text.trim().length>=2)
+      .slice(-60)
+      .map(item=>({text:item.text.trim().slice(0,4000),side:item.side==='left'||item.side==='right'?item.side:'center',...(typeof item.id==='string'&&item.id.length>=1&&item.id.length<=200?{id:item.id}: {})}))
+    const conversationId=createHash('sha256').update(`${currentWorkspaceService}:${url}:${String(snapshot?.conversationHint||'').slice(0,200)}`).digest('hex').slice(0,16)
+    return {conversationId,messages,text:messages.map(item=>item.text).join('\n')}
+  })
   ipcMain.handle('ai:models', (event) => { trusted(event); return listLocalModels() })
   ipcMain.handle('ai:run', async (event, task: AiTask, text: string, model: string, requestId?: unknown) => {
     trusted(event)
     if(typeof model!=='string'||typeof text!=='string'||(requestId!==undefined&&(typeof requestId!=='string'||requestId.length<1||requestId.length>100)))throw new Error('Nội dung không hợp lệ')
     if(masking)text=maskSensitive(text)
-    if(model.startsWith('chatgpt:')&&!hasCloudConsentForTask(task,cloudConsent,backgroundCloudConsent))throw new Error(task==='translateMessages'?'Anh cần cho phép gửi chữ OCR nền đến ChatGPT trước.':'Anh cần cho phép xử lý cloud trước khi gửi nội dung.')
+    if(model.startsWith('chatgpt:')&&!hasCloudConsentForTask(task,cloudConsent,backgroundCloudConsent))throw new Error(task==='translateLatest'||task==='translateMessages'?'Anh cần cho phép gửi chữ tin nhắn hiển thị đến ChatGPT trước.':'Anh cần cho phép xử lý cloud trước khi gửi nội dung.')
+    const reasoningEffort=model.startsWith('chatgpt:')&&isGpt6Model(model.slice(8))
+      ? reasoningEffortForTask(task,learning.getReasoningEffort(),learning.getTranslationReasoningEffort(),learning.getFastMode(),FAST_REASONING_EFFORT)
+      : undefined
     const controller=new AbortController()
     const id=typeof requestId==='string'?requestId:null
     if(id && aiRequests.has(id))throw new Error('Mã yêu cầu AI đang được dùng.')
     if(id)aiRequests.set(id,controller)
     try {
+      const timing={requestMs:0,firstResponseMs:null as number|null,completionMs:0}
+      const onTiming=(update:Partial<typeof timing>)=>Object.assign(timing,update)
+      const onText=(delta:string)=>{if(task==='translateLatest'&&id&&!event.sender.isDestroyed())event.sender.send('ai:stream',{requestId:id,delta})}
       const result=model.startsWith('chatgpt:')
-        ? await runLocalAi(task,text,model.slice(8),(provider,input,instructions,signal)=>chatgpt.respond(provider,input,instructions,signal),controller.signal)
-        : await runLocalAi(task,text,model,undefined,controller.signal)
+        ? await runLocalAi(task,text,model.slice(8),(provider,input,instructions,signal,onResponseTiming,onResponseText)=>chatgpt.respond(provider,input,instructions,signal,reasoningEffort,onResponseTiming,onResponseText),controller.signal,onTiming,onText)
+        : await runLocalAi(task,text,model,undefined,controller.signal,onTiming,onText)
       await learning.recordAiUsage(model.startsWith('chatgpt:')?'chatgpt':'ollama',task).catch(()=>{})
-      return result
+      return task==='translateMessages'||task==='translateLatest'?{result,timing}:result
     } finally { if(id)aiRequests.delete(id) }
   })
   ipcMain.handle('ai:cancel',(event,requestId:unknown)=>{
@@ -275,16 +359,17 @@ app.whenReady().then(async () => {
   ipcMain.handle('workspace:open', (event, service: keyof typeof sites) => {
     trusted(event)
     if (!Object.hasOwn(sites, service)) throw new Error('Invalid service')
-    ocr.invalidate()
-    for (const existing of views.values()) existing.setVisible(false)
+    currentWorkspaceService=service
+    for (const existing of views.values()) { existing.webContents.send('chat:observer-control',false); existing.setVisible(false) }
     const existing = views.get(service)
     if (existing) {
       view = existing
       view.setVisible(true)
+      if(chatReadAuthorized)view.webContents.send('chat:observer-control',true)
       layoutWorkspaceViews()
       return { title: view.webContents.getTitle() }
     }
-    view = new WebContentsView({ webPreferences: { partition: `persist:linguahub-${service}`, nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false } })
+    view = new WebContentsView({ webPreferences: { preload: join(import.meta.dirname, '../preload/chat-view.cjs'), partition: `persist:linguahub-${service}`, nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false } })
     views.set(service, view)
     const serviceContents=view.webContents
     serviceContents.session.setPermissionCheckHandler((contents,permission,origin)=>canShowWorkspaceNotification(service,permission,origin,notificationPermissions[service],contents===null || contents===serviceContents))
@@ -312,18 +397,23 @@ app.whenReady().then(async () => {
     window.contentView.addChildView(view)
     layoutWorkspaceViews()
     const openingView = view
-    return openingView.webContents.loadURL(sites[service]).then(() => ({ title: openingView.webContents.getTitle() }))
+    return openingView.webContents.loadURL(sites[service]).then(() => {
+      if(chatReadAuthorized&&view===openingView)openingView.webContents.send('chat:observer-control',true)
+      return { title: openingView.webContents.getTitle() }
+    })
   })
   ipcMain.handle('workspace:dashboard', event => {
     trusted(event)
-    ocr.stop()
+    chatReadAuthorized=false
     backgroundCloudConsent=false
+    clearChatMutationDebounces()
+    controlChatObservers(false)
     for(const child of views.values())if(!child.webContents.isDestroyed())child.setVisible(false)
     view=undefined
     return true
   })
   window.on('resize', layoutWorkspaceViews)
-  window.on('closed', () => { void ocr.dispose().catch(()=>{}); for (const child of views.values()) if (!child.webContents.isDestroyed()) child.webContents.close(); views.clear() })
+  window.on('closed', () => { chatReadAuthorized=false; for (const child of views.values()) if (!child.webContents.isDestroyed()) child.webContents.close(); views.clear() })
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   window.webContents.on('render-process-gone',()=>{void diagnostic('renderer-gone')})
   void diagnostic('application-ready')

@@ -1,34 +1,27 @@
-# Giới hạn và việc cần xác minh
+# Giới hạn hiện tại
 
-Đây là bản phát triển. Mã nguồn và kiểm thử đã tiến thêm, nhưng một số luồng phải được xác minh trên app đóng gói và tài khoản/tin nhắn thật.
+## Đọc và dịch chat
 
-## Đã có bằng chứng
+- LinguaHub đọc chữ từ DOM của bong bóng tin nhắn đang hiện trong WebContentsView. Nội dung ảnh, âm thanh, file, chữ trong chat đã cuộn khỏi vùng dựng và các trang khác không được đọc.
+- WhatsApp/Teams có thể thay đổi DOM hoặc cách ảo hóa danh sách tin; khi đó selector có thể bỏ sót hoặc lấy thiếu tin. Kiểm thử hiện dùng DOM tổng hợp, chưa xác minh trực tiếp adapter mới trên trang thật.
+- AI được yêu cầu nhận diện ngôn ngữ từng tin, dịch tiếng Anh sang tiếng Việt và bỏ qua ngôn ngữ khác. Chất lượng và thời gian phản hồi tùy model.
+- Đọc chữ cục bộ và gửi chữ tới ChatGPT cần hai xác nhận riêng. ChatGPT dùng quota tài khoản chia sẻ; một lượt trước đây bị từ chối do quota, nên inference thành công chưa được chứng minh trong lần sửa DOM này. Ollama chạy cục bộ.
+- Không tự gửi tin nhắn, không đọc cookie ChatGPT, không lưu ảnh hoặc nội dung hội thoại, không dùng OCR và không dùng API key.
 
-- Người dùng xác nhận đăng nhập WhatsApp và Teams trong app.
-- TypeScript đạt và 53 kiểm thử tự động đạt. Kiểm thử bao phủ schema AI, callback/PKCE, lưu client ID, refresh token, retry thu hồi, định dạng request Responses, stream, quyền notification và cấu hình shortcut Windows, OCR segmentation/browser worker/tài nguyên bản cài, cache, SQLite, xóa dữ liệu/thu hồi, tách quyền ChatGPT nhập tay và quyền dịch OCR nền, từ vựng, tiến độ và retention.
-- Hồ sơ SIWC thật giải mã được, có quyền `chatgpt.tokens.use.direct` và trả về 8 model. Lượt inference với câu mẫu đến endpoint nhưng nhận lỗi hạn mức ChatGPT dùng chung giữa các ứng dụng; chưa có inference hoàn tất.
-- Bộ cài NSIS x64 mới đã build; SHA-256 `0bb2c377aca0c9a987d1bbf7268d93be575ee8adf891cd3c7283a25942b32ab7` khớp file `.sha256`. Cài đặt cập nhật vào `C:\Program Files\LinguaHub AI Pro` và khởi chạy bản mới đã xác minh; `app.asar` và OCR worker trong cài đặt trùng hash với gói build. Shortcut Start Menu ghi `notification-shortcut-ready`. Gỡ cài đặt chưa được thử.
-- Panel trợ lý có thể đổi chiều rộng, thu gọn/mở lại; chiều rộng được lưu cục bộ.
-- Tiến độ học lưu ngày ôn/bài học, thống kê từ đến hạn, chuỗi ngày và lượt AI thành công theo provider; kỳ hạn lưu 30/90/365 ngày có xác nhận trước khi xóa. Thống kê AI không chứa nội dung.
-- English Coach nhận trực tiếp câu OCR qua nút **Học câu này**; phân tích cuộc trò chuyện có gợi ý theo dõi nhưng bắt buộc dẫn chứng khớp văn bản nguồn. Cài đặt có thao tác xóa toàn bộ dữ liệu cục bộ kèm xác nhận, ngắt ChatGPT và xóa phiên web.
+## Xác minh kỹ thuật
 
-## Chưa được chứng minh
+- Có kiểm thử tự động cho luồng OAuth/PKCE, refresh/thu hồi giả lập, Responses API, AI schema, quyền consent, selector DOM mô phỏng cho WhatsApp/Teams, thông báo, SQLite và học tập.
+- Kiểm thử DOM tổng hợp không thể bảo đảm bộ chọn khớp phiên bản website đang chạy. Chưa có kiểm tra dịch end-to-end trên tin nhắn thật sau thay đổi adapter.
+- Thông báo thử của LinguaHub chứng minh Windows nhận toast từ app; thông báo WhatsApp/Teams với tin nhắn thật vẫn cần xác minh trong từng dịch vụ.
+- Bộ cài Windows NSIS chưa ký số. Build không thay thế việc cài đặt và chạy kiểm thử trên máy người dùng.
 
-- Tự làm mới token/thu hồi thật; hiện mới có kiểm thử với phản hồi HTTP giả lập. Kết nối và model catalog đã được xác minh bằng hồ sơ thật, nhưng inference hoàn tất vẫn chờ hạn mức dùng chung được làm mới. Tài liệu OpenAI nêu điều kiện eligibility cho ChatGPT plan usage; trạng thái quota hiện tại không chứng minh mọi lần dùng sau đều được chấp nhận.
-- Tesseract Chromium Web Worker và core lấy từ tài nguyên bản cài đã nhận dạng đúng ảnh tiếng Anh tổng hợp với confidence 95%. OCR/phân đoạn trên vùng chat thật, cuộn trang và hội thoại mới vẫn cần xác minh.
-- Hồ sơ app có quyền notification cho WhatsApp và Teams (`true`). Nút thử trong app đã phát sự kiện Electron `show`, và giao diện báo Windows đã nhận yêu cầu toast. Thông báo do WhatsApp/Teams phát khi có tin mới vẫn chưa được xác minh; còn phụ thuộc cài đặt Desktop notification trong từng dịch vụ.
+## Tài khoản ChatGPT
 
-## Chưa hoàn thiện
+- Chỉ hỗ trợ một hồ sơ ChatGPT hiện tại. Token lưu mã hóa bằng Windows safeStorage; nếu token bị thu hồi, cần đăng nhập lại.
+- Nhánh có lựa chọn đổi tài khoản/không gian làm việc để khắc phục lỗi `3p_login_workspace_scope_denied`. Kiểm thử callback và lỗi OAuth là mô phỏng; chưa kiểm chứng lại bằng tài khoản/workspace đã gặp lỗi.
+- Tích hợp dùng đăng nhập SIWC và quyền gói tài khoản, không dùng API key. Quota và điều kiện inference có thể thay đổi theo tài khoản/thời điểm.
 
-- Luồng OAuth tự triển khai theo tài liệu SIWC, chưa dùng `@siwc/local`: DevKit chính thức mô tả app desktop mẫu trên macOS và cấp license noncommercial cho code/docs; dùng SDK đó cho ERP công việc chưa phù hợp nếu chưa có quyền thương mại. Tài khoản thật và quyền token trên Windows vẫn cần test.
-- Chỉ lưu một hồ sơ ChatGPT hiện tại. Dữ liệu đăng ký client ID riêng với token; file token mã hóa bằng Windows safeStorage. Nếu OpenAI thu hồi token, app yêu cầu đăng nhập lại.
-- Dịch OCR có thể dùng Ollama cục bộ hoặc chữ OCR qua ChatGPT sau xác nhận cloud riêng. Gửi chữ nền ChatGPT chưa được thử với tin nhắn thật; ảnh OCR không được gửi.
-- OCR phân đoạn theo hình học dòng, đợi tin ổn định hai lần và dùng dấu vân tay tiêu đề hội thoại cục bộ. Đây là heuristic; có thể ghép/tách sai, bỏ tin không phải tiếng Anh hoặc đoán sai người gửi.
-- Dịch nền liên tục hiện chỉ dùng Ollama cục bộ; muốn dịch tự động phải bật OCR cho vùng đang hiển thị và chọn model. App dừng chụp khi thu nhỏ hoặc không hiển thị.
-- Panel có điều hướng theo mục, co giãn/thu gọn; chưa có router trang riêng, nhiều cửa sổ workspace, tray, kiểm thử call/camera Teams hoặc chấm điểm phát âm.
-- Bài học hằng ngày hiện là nội dung ERP mẫu; cá nhân hóa chủ yếu đến từ từ vựng anh lưu và lịch ôn.
-- ChatGPT xử lý nội dung nhập tay sau xác nhận trong phiên app; chữ OCR nền chỉ gửi sau xác nhận riêng. Không có OpenAI API key hoặc Gemini provider.
-- Bộ cài NSIS không ký số. Build/đóng gói thành công không chứng minh cài đặt hoặc chạy đủ chức năng trên mọi máy Windows.
-- Inference ChatGPT hoàn tất bằng tài khoản thật; hiện API báo hạn mức gói dùng chung đã đạt. Cần đợi quota làm mới để xác nhận đầu ra dịch thành công.
+## Sản phẩm
 
-App không tự gửi tin nhắn, không đọc cookie ChatGPT, không lưu ảnh OCR và không tự bật API trả phí.
+- Không có tray; đóng app sẽ dừng notification web. Chưa hỗ trợ nhiều cửa sổ workspace, gọi/camera Teams hoặc chấm điểm phát âm.
+- Bài học hằng ngày hiện là nội dung ERP mẫu; cá nhân hóa chủ yếu từ từ vựng và lịch ôn.

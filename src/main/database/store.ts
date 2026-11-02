@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { vocabulary, appSettings, activity } from './schema'
+import { DEFAULT_REASONING_EFFORT, DEFAULT_TRANSLATION_REASONING_EFFORT, REASONING_EFFORTS } from '../../shared/model-reasoning'
 
 function localDayKey(timestamp: number) {
   const date=new Date(timestamp)
@@ -37,6 +38,10 @@ export async function createLearningStore(directory: string, wasmPath: string) {
     const rows = db.select().from(appSettings).all()
     const values = Object.fromEntries(rows.map(row => [row.key, row.value]))
     return { whatsapp: values['notifications.whatsapp'] === 'true', teams: values['notifications.teams'] === 'true' }
+  }
+  const getManualCloudConsent = () => {
+    ensureHealthy()
+    return db.select().from(appSettings).where(eq(appSettings.key,'chatgpt.manualCloudConsent')).get()?.value === 'true'
   }
   const readRetentionDays = () => {
     const value=db.select().from(appSettings).all().find(row=>row.key==='privacy.retentionDays')?.value
@@ -91,6 +96,15 @@ export async function createLearningStore(directory: string, wasmPath: string) {
   await persist()
   return {
     getNotificationPreferences,
+    getManualCloudConsent,
+    async setManualCloudConsent(input:unknown){
+      ensureHealthy()
+      const enabled=z.boolean().parse(input)
+      const key='chatgpt.manualCloudConsent'
+      db.insert(appSettings).values({key,value:String(enabled)}).onConflictDoUpdate({target:appSettings.key,set:{value:String(enabled)}}).run()
+      await persist()
+      return enabled
+    },
     getRetentionDays:readRetentionDays,
     async setRetentionDays(input:unknown){
       ensureHealthy()
@@ -107,7 +121,7 @@ export async function createLearningStore(directory: string, wasmPath: string) {
       return true
     },
     async recordAiUsage(provider:unknown,task:unknown){
-      const data=z.object({provider:z.enum(['ollama','chatgpt']),task:z.enum(['translate','translateMessages','reply','coach','summary','risks'])}).parse({provider,task})
+      const data=z.object({provider:z.enum(['ollama','chatgpt']),task:z.enum(['translate','translateLatest','translateMessages','reply','replyFromChat','coach','summary','risks'])}).parse({provider,task})
       await recordActivity('ai_request',data)
     },
     async setNotificationPreference(service: unknown, enabled: unknown) {
@@ -123,7 +137,42 @@ export async function createLearningStore(directory: string, wasmPath: string) {
       const rows = db.select().from(appSettings).all()
       const values = Object.fromEntries(rows.map(row => [row.key, row.value]))
       const savedWidth=Number(values.panelWidth)
-      return { theme: values.theme === 'light' ? 'light' : 'dark', model: values.model || '', panelWidth:Number.isFinite(savedWidth)&&savedWidth>=280&&savedWidth<=560?savedWidth:360 }
+      return { theme: values.theme === 'dark' ? 'dark' : 'light', model: values.model || '', panelWidth:Number.isFinite(savedWidth)&&savedWidth>=280&&savedWidth<=560?savedWidth:360 }
+    },
+    getReasoningEffort() {
+      ensureHealthy()
+      const value=db.select().from(appSettings).where(eq(appSettings.key,'reasoningEffort')).get()?.value
+      return (REASONING_EFFORTS as readonly string[]).includes(value || '') ? value as typeof REASONING_EFFORTS[number] : DEFAULT_REASONING_EFFORT
+    },
+    async setReasoningEffort(input: unknown) {
+      ensureHealthy()
+      const reasoningEffort=z.enum(REASONING_EFFORTS).parse(input)
+      db.insert(appSettings).values({key:'reasoningEffort',value:reasoningEffort}).onConflictDoUpdate({target:appSettings.key,set:{value:reasoningEffort}}).run()
+      await persist()
+      return reasoningEffort
+    },
+    getTranslationReasoningEffort() {
+      ensureHealthy()
+      const value=db.select().from(appSettings).where(eq(appSettings.key,'translationReasoningEffort')).get()?.value
+      return (REASONING_EFFORTS as readonly string[]).includes(value || '') ? value as typeof REASONING_EFFORTS[number] : DEFAULT_TRANSLATION_REASONING_EFFORT
+    },
+    async setTranslationReasoningEffort(input: unknown) {
+      ensureHealthy()
+      const reasoningEffort=z.enum(REASONING_EFFORTS).parse(input)
+      db.insert(appSettings).values({key:'translationReasoningEffort',value:reasoningEffort}).onConflictDoUpdate({target:appSettings.key,set:{value:reasoningEffort}}).run()
+      await persist()
+      return reasoningEffort
+    },
+    getFastMode() {
+      ensureHealthy()
+      return db.select().from(appSettings).where(eq(appSettings.key,'fastMode')).get()?.value === 'true'
+    },
+    async setFastMode(input: unknown) {
+      ensureHealthy()
+      const enabled=z.boolean().parse(input)
+      db.insert(appSettings).values({key:'fastMode',value:String(enabled)}).onConflictDoUpdate({target:appSettings.key,set:{value:String(enabled)}}).run()
+      await persist()
+      return enabled
     },
     async setPreferences(input: unknown) {
       ensureHealthy()

@@ -8,7 +8,11 @@ const coachSchema = z.object({ meaning:z.string(), grammar:z.string(), ipa:z.str
 function Sentence({text}:{text:string}) {
   const [status,setStatus] = useState('')
   const speak = (locale:'en-US'|'en-GB') => { if (!('speechSynthesis' in window)) {setStatus('Máy chưa hỗ trợ đọc văn bản.');return} speechSynthesis.cancel();const speech=new SpeechSynthesisUtterance(text);speech.lang=locale;speech.rate=.85;speechSynthesis.speak(speech) }
-  return <><p>{text}</p><button onClick={()=>navigator.clipboard.writeText(text).then(()=>setStatus('Đã sao chép'),()=>setStatus('Không sao chép được'))}>Sao chép câu</button><button onClick={()=>speak('en-US')}>Nghe giọng US</button><button onClick={()=>speak('en-GB')}>Nghe giọng UK</button><small role="status">{status}</small></>
+  const copy = async () => {
+    try { await window.lingua.writeClipboardText(text); setStatus('Đã sao chép') }
+    catch { setStatus('Không sao chép được. Anh thử lại.') }
+  }
+  return <><p>{text}</p><button type="button" onClick={()=>void copy()}>Sao chép câu</button><button type="button" onClick={()=>speak('en-US')}>Nghe giọng US</button><button type="button" onClick={()=>speak('en-GB')}>Nghe giọng UK</button><small role="status">{status}</small></>
 }
 export function AiResult({result}:{result:unknown}) {
   const risks=riskSchema.safeParse(result)

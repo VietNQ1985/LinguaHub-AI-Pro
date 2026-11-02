@@ -1,3 +1,3 @@
 export function hasCloudConsentForTask(task: string, manualConsent: boolean, backgroundConsent: boolean) {
-  return task === 'translateMessages' ? backgroundConsent : manualConsent
+  return task === 'translateLatest' || task === 'translateMessages' || task === 'replyFromChat' ? backgroundConsent : manualConsent
 }

@@ -1,7 +1,9 @@
-export async function readCompletedResponse(response: Response): Promise<string> {
+import type { AiTextHandler, AiTimingHandler } from '../../shared/ai-timing'
+
+export async function readCompletedResponse(response: Response, requestStartedAt = performance.now(), onTiming?: AiTimingHandler, onText?: AiTextHandler): Promise<string> {
   if(!response.ok || !response.body)throw new Error(`OpenAI không chấp nhận yêu cầu (${response.status}). Không chuyển sang API trả phí.`)
   const reader=response.body.getReader(), decoder=new TextDecoder()
-  let buffer='',text='',completed=false
+  let buffer='',text='',completed=false,firstResponseMs:number|null=null
   try {
     while(true){
       const chunk=await reader.read()
@@ -16,8 +18,13 @@ export async function readCompletedResponse(response: Response): Promise<string>
         if(event.type==='response.output_text.delta'){
           if(typeof event.delta!=='string')throw new Error('Dữ liệu streaming không hợp lệ.')
           text+=event.delta
+          onText?.(event.delta)
+          if(event.delta.length>0 && firstResponseMs===null){firstResponseMs=performance.now()-requestStartedAt;onTiming?.({firstResponseMs})}
         }
-        if(event.type==='response.completed')completed=true
+        if(event.type==='response.completed'){
+          completed=true
+          onTiming?.({completionMs:performance.now()-requestStartedAt})
+        }
         if(['response.failed','response.incomplete','error'].includes(event.type)){
           const rawCode=event.response?.error?.code ?? event.error?.code ?? event.code
           const code=typeof rawCode==='string'&&/^[a-zA-Z0-9_-]{1,80}$/.test(rawCode)?rawCode:null
