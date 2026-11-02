@@ -1,21 +1,22 @@
 import { Activity, Bell, Building2, ChevronDown, ChevronRight, Search, Settings } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RecordDialog, NavButton } from "./components/ui";
 import { defaultPreferences, initialBots, initialContacts, initialConversations, initialMessages, initialNotices, initialTasks, pageTitles, primaryNav } from "./data/initialState";
-import { BotsPage } from "./features/bots/BotsPage";
-import { ChatPage } from "./features/chat/ChatPage";
-import { ContactsPage } from "./features/contacts/ContactsPage";
-import { InboxPage } from "./features/inbox/InboxPage";
-import { NotificationsPage } from "./features/notifications/NotificationsPage";
-import { SettingsPage } from "./features/settings/SettingsPage";
-import { TasksPage } from "./features/tasks/TasksPage";
-import { ZaloPage } from "./features/zalo/ZaloPage";
 import { makeId } from "./lib/ids";
 import { deleteBot, deleteContact, deleteTask, markAllConversationsRead, markConversationRead, totalUnread, updateTaskStatus, upsertBot, upsertContact, upsertTask } from "./lib/records";
 import { usePersistentState } from "./hooks/usePersistentState";
 import { decodeBots, decodeContacts, decodeConversations, decodeMessages, decodeNotices, decodePreferences, decodeSelectedConversation, decodeTasks } from "./lib/validation";
 import type { BotItem, Contact, Conversation, Message, ModalKind, PageKey, TaskItem } from "./types/models";
 import type { RecordDialogDraft } from "./types/record-dialog";
+
+const ChatPage = lazy(() => import("./features/chat/ChatPage").then((module) => ({ default: module.ChatPage })));
+const ContactsPage = lazy(() => import("./features/contacts/ContactsPage").then((module) => ({ default: module.ContactsPage })));
+const TasksPage = lazy(() => import("./features/tasks/TasksPage").then((module) => ({ default: module.TasksPage })));
+const ZaloPage = lazy(() => import("./features/zalo/ZaloPage").then((module) => ({ default: module.ZaloPage })));
+const InboxPage = lazy(() => import("./features/inbox/InboxPage").then((module) => ({ default: module.InboxPage })));
+const BotsPage = lazy(() => import("./features/bots/BotsPage").then((module) => ({ default: module.BotsPage })));
+const NotificationsPage = lazy(() => import("./features/notifications/NotificationsPage").then((module) => ({ default: module.NotificationsPage })));
+const SettingsPage = lazy(() => import("./features/settings/SettingsPage").then((module) => ({ default: module.SettingsPage })));
 
 interface EditorState {
   kind: ModalKind;
@@ -231,7 +232,7 @@ function App() {
     </aside>
     <main className="workspace-main"><header className="topbar"><div className="page-heading"><span className="breadcrumb">SignalDesk</span><ChevronRight size={14} /><h1>{pageTitles[page]}</h1></div><div className="topbar-actions"><label className="global-search"><Search size={16} /><input ref={globalSearchRef} aria-label="Tìm trong workspace" placeholder="Tìm kiếm..." value={globalQuery} onChange={(event) => setGlobalQuery(event.target.value)} /><kbd>Ctrl+K</kbd></label><span className="prototype-pill"><span /> Dữ liệu trên máy</span><button className="top-avatar" title="Mở cài đặt" aria-label="Mở cài đặt" onClick={() => openPage("settings")}>SD</button></div></header>
       {storageWarnings.length > 0 && <div className="storage-warning" role="alert"><div><strong>Một số dữ liệu cần được kiểm tra</strong><span>{storageWarnings.join(" ")}</span></div></div>}
-      <div className="page-content" key={page}>{renderContent()}</div>
+      <div className="page-content" key={page}><Suspense fallback={<div className="page-loading" role="status">Đang mở mục này…</div>}>{renderContent()}</Suspense></div>
     </main>
     {editor && <RecordDialog key={`${editor.kind}-${editor.id ?? "new"}`} kind={editor.kind} initial={editorInitial()} onClose={() => setEditor(null)} onSave={saveEditor} />}
     {toast && <div className="toast" role="status">{toast}</div>}

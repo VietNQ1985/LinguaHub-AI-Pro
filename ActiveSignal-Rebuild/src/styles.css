@@ -509,6 +509,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .storage-warning > div { display: flex; flex-direction: column; gap: 3px; }
 .storage-warning strong { font-size: 13px; }
 .storage-warning span { font-size: 12px; line-height: 1.5; }
+.page-loading { display: grid; min-height: 180px; place-items: center; color: var(--muted); font-size: 14px; }
 .zalo-actions, .contact-actions, .task-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .zalo-actions { margin-top: 14px; }
 .contact-actions { justify-content: center; margin-top: 16px; }
