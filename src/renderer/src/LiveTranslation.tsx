@@ -1,12 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { TranslationCache } from '../../shared/translation-cache'
 import { messageIdentityKeys } from '../../shared/message-identity'
+import { maskSensitive } from '../../shared/mask-sensitive'
 import { FALLBACK_TRANSLATION_SCAN_MS, IDLESS_MESSAGE_CONFIRMATION_MS, nextTranslationBatch, translationCacheScope } from '../../shared/translation-policy'
 import type { AiResponseTiming } from '../../shared/ai-timing'
 
 type MessageStatus = 'confirming' | 'waiting-model' | 'waiting-consent' | 'translating' | 'translated' | 'not-english' | 'needs-review' | 'failed'
 type TranslationValue = { translation: string; explanation: string }
-type VisibleMessage = { key: string; id?: string; text: string; side: 'left' | 'right' | 'center'; status: MessageStatus; value?: TranslationValue; partialTranslation?: string; timing?: { detectedMs: number; confirmationMs: number; readyAt: number; source: 'event' | 'poll' | 'initial' } }
+type VisibleMessage = { key: string; id?: string; text: string; side: 'left' | 'right' | 'center'; status: MessageStatus; value?: TranslationValue; partialTranslation?: string; failureMessage?: string; timing?: { detectedMs: number; confirmationMs: number; readyAt: number; source: 'event' | 'poll' | 'initial' } }
 type TranslationBatch = { translations: Array<{ id: string; translation: string; explanation?: string }> }
 type TranslationRun = { result: TranslationBatch | { translation: string; explanation?: string }; timing: AiResponseTiming }
 type ScanTrigger = { source: 'event' | 'poll' | 'initial' | 'confirmation' | 'completion' | 'retry'; observedAt?: number }
@@ -27,6 +28,7 @@ export function LiveTranslation({ model }: { model: string }) {
   const currentBatches = useRef(new Map<'priority' | 'backlog', string>())
   const inFlightMessageKeys = useRef(new Set<string>())
   const failed = useRef(new Set<string>())
+  const failureMessages = useRef(new Map<string, string>())
   const latestSnapshot = useRef<{ version: number; messages: VisibleMessage[] } | null>(null)
   const pendingUiTimings = useRef<Array<Omit<TimingSample, 'uiUpdateMs'>>>([])
   const pendingFirstPartialUi = useRef<Array<{ requestId: string; startedAt: number }>>([])
@@ -171,6 +173,8 @@ export function LiveTranslation({ model }: { model: string }) {
             const translated = { translation: result.translation, explanation: result.explanation || '' }
             values.set(primary.key, translated)
             cache.current.set(activeModel, primary.text, translated, Date.now(), cacheScope(primary))
+            failed.current.delete(failureKey(primary))
+            failureMessages.current.delete(failureKey(primary))
           } else {
             if (!result || !('translations' in result) || !Array.isArray(result.translations)) throw new Error('Kết quả dịch theo từng tin không hợp lệ.')
             for (const item of result.translations) {
@@ -179,6 +183,8 @@ export function LiveTranslation({ model }: { model: string }) {
               const translated = { translation: item.translation, explanation: item.explanation || '' }
               values.set(source.key, translated)
               cache.current.set(activeModel, source.text, translated, Date.now(), cacheScope(source))
+              failed.current.delete(failureKey(source))
+              failureMessages.current.delete(failureKey(source))
             }
             if (values.size !== sourceById.size) throw new Error('AI không trả đủ bản dịch cho các tin mới.')
           }
@@ -210,11 +216,16 @@ export function LiveTranslation({ model }: { model: string }) {
         })
         .catch(error => {
           if (cancelled || currentBatches.current.get(lane) !== requestId || version !== conversationVersion.current) return
-          for (const source of sourceById.values()) failed.current.add(failureKey(source))
-          const updated = (latestSnapshot.current?.messages || []).map(item => sourceByIdHasItem(sourceById, item) ? { ...item, status: 'failed' as const, partialTranslation: undefined } : item)
+          const detail = getTranslationFailureMessage(error)
+          for (const source of sourceById.values()) {
+            const key = failureKey(source)
+            failed.current.add(key)
+            failureMessages.current.set(key, detail)
+          }
+          const updated = (latestSnapshot.current?.messages || []).map(item => sourceByIdHasItem(sourceById, item) ? { ...item, status: 'failed' as const, partialTranslation: undefined, failureMessage: detail } : item)
           latestSnapshot.current = { version, messages: updated }
           commitMessages(updated)
-          setStatus(error instanceof Error ? `Dịch chưa thành công: ${error.message}` : 'Dịch chưa thành công.')
+          setStatus('Có tin chưa dịch được; xem nguyên nhân trên thẻ tin nhắn.')
         })
         .finally(() => {
           removeStreamListener()
@@ -226,8 +237,9 @@ export function LiveTranslation({ model }: { model: string }) {
           if (latest && latest.version === conversationVersion.current) {
             const refreshed = latest.messages.map(item => {
               const cached = cache.current.get(activeModel, item.text, Date.now(), cacheScope(item))
-              if (cached) return { ...item, status: cached.translation.trim() ? 'translated' as const : 'not-english' as const, value: cached }
-              if (failed.current.has(failureKey(item))) return { ...item, status: 'failed' as const }
+              if (cached) return { ...item, status: cached.translation.trim() ? 'translated' as const : 'not-english' as const, value: cached, failureMessage: undefined }
+              const key = failureKey(item)
+              if (failed.current.has(key)) return { ...item, status: 'failed' as const, failureMessage: failureMessages.current.get(key) }
               return item
             })
             latestSnapshot.current = { ...latest, messages: refreshed }
@@ -263,6 +275,7 @@ export function LiveTranslation({ model }: { model: string }) {
           conversationVersion.current++
           cancelBatch()
           failed.current.clear()
+          failureMessages.current.clear()
           observations.clear()
           knownMessageKeys.clear()
           newestPriorityKey=null
@@ -291,9 +304,9 @@ export function LiveTranslation({ model }: { model: string }) {
           const candidate = { key, id: item.id, text: item.text, side: item.side }
           const cached = activeModel ? cache.current.get(activeModel, item.text, capturedAt, cacheScope(candidate)) : undefined
           const failedKey = failureKey(candidate)
-          if (cached) return { ...candidate, status: cached.translation.trim() ? 'translated' : 'not-english', value: cached }
+          if (cached) return { ...candidate, status: cached.translation.trim() ? 'translated' : 'not-english', value: cached, failureMessage: undefined }
           if (!activeModel) return { ...candidate, status: model.startsWith('chatgpt:') ? 'waiting-consent' : 'waiting-model' }
-          if (failed.current.has(failedKey)) return { ...candidate, status: 'failed' }
+          if (failed.current.has(failedKey)) return { ...candidate, status: 'failed', failureMessage: failureMessages.current.get(failedKey) }
           if (item.id) return { ...candidate, status: 'translating', timing: { detectedMs: estimatedDetectionMs, confirmationMs: 0, readyAt: capturedAt, source: trigger.source === 'event' ? 'event' : trigger.source === 'initial' ? 'initial' : 'poll' } }
 
           const observation = observations.get(key)
@@ -322,6 +335,7 @@ export function LiveTranslation({ model }: { model: string }) {
         else if (!activeModel) setStatus(model.startsWith('chatgpt:') ? 'Cần cho phép gửi chữ tin nhắn hiển thị đến ChatGPT để tự dịch' : 'Đã đọc tin nhắn. Chọn ChatGPT hoặc kết nối Ollama để tự dịch')
         else {
           if (visible.some(item => item.status === 'confirming')) setStatus('Đang kiểm tra tin mới…')
+          else if (visible.some(item => item.status === 'failed')) setStatus('Có tin chưa dịch được; xem nguyên nhân trên thẻ tin nhắn.')
           else if (!currentBatches.current.size) setStatus('Đang theo dõi tin nhắn hiển thị')
           translatePending(visible, currentVersion)
         }
@@ -361,6 +375,7 @@ export function LiveTranslation({ model }: { model: string }) {
       initialPriorityPending=true
       observations.clear()
       failed.current.clear()
+      failureMessages.current.clear()
       cancelBatch()
       commitMessages([])
       setStatus('Đã đổi dịch vụ, chờ khung chat mới')
@@ -377,6 +392,7 @@ export function LiveTranslation({ model }: { model: string }) {
       initialPriorityPending=true
       observations.clear()
       failed.current.clear()
+      failureMessages.current.clear()
       cache.current.clear()
       cancelBatch()
       setEnabled(false)
@@ -387,6 +403,7 @@ export function LiveTranslation({ model }: { model: string }) {
     }
     const retry = () => {
       failed.current.clear()
+      failureMessages.current.clear()
       scheduleScan(0, { source: 'retry' })
     }
     window.addEventListener('linguahub:workspace', workspaceReset)
@@ -403,6 +420,7 @@ export function LiveTranslation({ model }: { model: string }) {
       if (fallbackTimer !== undefined) clearTimeout(fallbackTimer)
       cancelBatch()
       failed.current.clear()
+      failureMessages.current.clear()
     }
   }, [enabled, activeModel, model])
 
@@ -421,6 +439,7 @@ export function LiveTranslation({ model }: { model: string }) {
       setEnabled(false)
       cache.current.clear()
       failed.current.clear()
+      failureMessages.current.clear()
       latestSnapshot.current = null
       setMessages([])
       await window.lingua.stopVisibleChatRead()
@@ -447,7 +466,7 @@ export function LiveTranslation({ model }: { model: string }) {
     {enabled && messages.length === 0 && <div className="translation-empty">Anh mở một cuộc trò chuyện trên WhatsApp hoặc Teams. Bản dịch sẽ xuất hiện ở đây khi ứng dụng nhận diện được tin nhắn.</div>}
     {!enabled && <div className="translation-empty">Sau khi bật dịch, ứng dụng đọc chữ của tin nhắn đang hiển thị ngay trong giao diện chat. Không chụp màn hình.</div>}
 
-    {hasFailures && <button type="button" className="retry-button" onClick={() => { failed.current.clear(); setStatus('Đang thử dịch lại các tin chưa thành công…'); window.dispatchEvent(new Event('linguahub:retry-translation')) }}>↻ Thử dịch lại các tin chưa thành công</button>}
+    {hasFailures && <button type="button" className="retry-button" onClick={() => { failed.current.clear(); failureMessages.current.clear(); setStatus('Đang thử dịch lại các tin chưa thành công…'); window.dispatchEvent(new Event('linguahub:retry-translation')) }}>↻ Thử dịch lại các tin chưa thành công</button>}
 
     <div className="translation-list" aria-label="Danh sách bản dịch">
       {skippedCount > 0 && <p className="translation-skipped">Đã bỏ qua {skippedCount} tin không phải tiếng Anh</p>}
@@ -463,7 +482,7 @@ export function LiveTranslation({ model }: { model: string }) {
             </>
           : <>
               <p className={item.partialTranslation ? 'translation-vietnamese translation-streaming' : 'translation-original'} lang={item.partialTranslation ? 'vi' : undefined}>{item.partialTranslation || item.text}</p>
-              <p className="translation-wait">{item.partialTranslation ? 'Đang nhận bản dịch…' : item.status === 'needs-review' ? 'Chưa đọc rõ — kiểm tra lại' : item.status === 'waiting-consent' ? 'Chờ cho phép ChatGPT' : item.status === 'waiting-model' ? 'Chọn dịch vụ AI' : item.status === 'failed' ? 'Dịch chưa thành công' : item.status === 'confirming' ? 'Đang kiểm tra tin mới…' : 'Đang dịch…'}</p>
+              <p className="translation-wait">{item.partialTranslation ? 'Đang nhận bản dịch…' : item.status === 'needs-review' ? 'Chưa đọc rõ — kiểm tra lại' : item.status === 'waiting-consent' ? 'Chờ cho phép ChatGPT' : item.status === 'waiting-model' ? 'Chọn dịch vụ AI' : item.status === 'failed' ? `Dịch chưa thành công: ${item.failureMessage || 'Chưa có mã lỗi chi tiết.'}` : item.status === 'confirming' ? 'Đang kiểm tra tin mới…' : 'Đang dịch…'}</p>
               {item.partialTranslation && <details className="translation-details"><summary>Xem câu gốc</summary><p className="translation-source">{item.text}</p></details>}
             </>}
       </article>)}
@@ -491,14 +510,14 @@ export function LiveTranslation({ model }: { model: string }) {
 function sameMessages(left: VisibleMessage[], right: VisibleMessage[]) {
   return left.length === right.length && left.every((item, index) => {
     const other = right[index]
-    return item.key === other.key && item.status === other.status && item.value?.translation === other.value?.translation && item.value?.explanation === other.value?.explanation && item.partialTranslation === other.partialTranslation
+    return item.key === other.key && item.status === other.status && item.value?.translation === other.value?.translation && item.value?.explanation === other.value?.explanation && item.partialTranslation === other.partialTranslation && item.failureMessage === other.failureMessage
   })
 }
 
 function itemsWithTranslations(items: VisibleMessage[], values: Map<string, TranslationValue>) {
   return items.map(item => {
     const value = values.get(item.key)
-    return value ? { ...item, status: value.translation.trim() ? 'translated' as const : 'not-english' as const, value, partialTranslation: undefined } : item
+    return value ? { ...item, status: value.translation.trim() ? 'translated' as const : 'not-english' as const, value, partialTranslation: undefined, failureMessage: undefined } : item
   })
 }
 
@@ -511,6 +530,11 @@ function getChatReadFailureMessage(error: unknown) {
   const message = error instanceof Error ? error.message : typeof error === 'string' ? error : ''
   if (/not authorized|chưa cho phép/i.test(message)) return 'Anh cần bật quyền đọc chữ tin nhắn hiển thị trước.'
   return 'Chưa đọc được tin nhắn từ trang chat. Anh thử lại hoặc tải lại trang.'
+}
+
+function getTranslationFailureMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : ''
+  return maskSensitive(message.replace(/\s+/g, ' ').trim()).slice(0, 240) || 'Lỗi không xác định.'
 }
 
 function median(values: number[]) {
