@@ -41,6 +41,20 @@ test('refreshes an expired access token, stores rotated credentials, then lists 
   expect(stored).toMatchObject({accessToken:'new-access',refreshToken:'new-refresh',clientId:'oaiapp_issued'})
 })
 
+test('accepts object entries in advertised reasoning levels',async()=>{
+  await writeFile(join(directory,'chatgpt.enc'),Buffer.from(JSON.stringify({...record,expiresAt:Date.now()+3600000})))
+  const request=vi.fn(async(input:RequestInfo|URL)=>{
+    if(String(input)==='https://api.openai.com/v1/models')return new Response(JSON.stringify({models:[{
+      slug:'gpt-object-levels',display_name:'Object levels',visibility:'list',
+      supported_reasoning_levels:[{level:'low',description:'Low reasoning'},{level:'none',description:'No reasoning'},{level:'unsupported'}],
+    }]}),{status:200})
+    throw new Error(`Unexpected request ${String(input)}`)
+  })
+  const connection=new ChatGPTConnection(directory,request as typeof fetch)
+  await connection.initialize()
+  await expect(connection.listModels()).resolves.toEqual([{slug:'gpt-object-levels',name:'Object levels',reasoningEfforts:['low','none']}])
+})
+
 test('sends Responses API input as a user content list',async()=>{
   await writeFile(join(directory,'chatgpt.enc'),Buffer.from(JSON.stringify({...record,expiresAt:Date.now()+3600000})))
   let requestBody:Record<string,unknown>|undefined

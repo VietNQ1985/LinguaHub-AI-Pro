@@ -14,6 +14,24 @@ import type { AiTextHandler, AiTimingHandler } from '../../shared/ai-timing'
 
 const recordSchema = z.object({clientId:z.string(),subject:z.string(),email:z.string(),accessToken:z.string(),refreshToken:z.string().optional(),idToken:z.string(),expiresAt:z.number(),scopes:z.array(z.string())})
 type RecordData = z.infer<typeof recordSchema>
+const validReasoningEfforts=new Set<ReasoningEffort>(['none','low','medium','high','xhigh','max'])
+
+function normalizeReasoningEfforts(value:unknown):ReasoningEffort[]|undefined{
+  if(value===undefined)return undefined
+  const entries=Array.isArray(value)?value:[value]
+  const efforts=new Set<ReasoningEffort>()
+  for(const entry of entries){
+    const candidates=typeof entry==='string'?[entry]:entry&&typeof entry==='object'&&!Array.isArray(entry)
+      ?[...Object.keys(entry),...Object.values(entry).filter((item):item is string=>typeof item==='string')]
+      :[]
+    for(const candidate of candidates){
+      const effort=candidate.trim().toLowerCase() as ReasoningEffort
+      if(validReasoningEfforts.has(effort))efforts.add(effort)
+    }
+  }
+  return [...efforts]
+}
+
 export class ChatGPTConnection {
   private record: RecordData | null = null
   private registeredClientId: string | null = null
@@ -126,12 +144,14 @@ export class ChatGPTConnection {
     this.modelListPromise=(async()=>{
     const response=await this.request(`${RESOURCE}/models`,{headers:{Authorization:`Bearer ${await this.accessToken()}`},signal:AbortSignal.timeout(15000)})
     if(!response.ok)throw new Error(`Không lấy được model ChatGPT (${response.status}).`)
-    const data=z.object({models:z.array(z.object({slug:z.string(),display_name:z.string(),visibility:z.string(),supported_reasoning_efforts:z.array(z.string()).optional(),supported_reasoning_levels:z.array(z.string()).optional()}))}).parse(await response.json())
-    const validEfforts=new Set<ReasoningEffort>(['none','low','medium','high','xhigh','max'])
+    const data=z.object({models:z.array(z.object({slug:z.string(),display_name:z.string(),visibility:z.string(),supported_reasoning_efforts:z.unknown().optional(),supported_reasoning_levels:z.unknown().optional()}))}).parse(await response.json())
     const models=data.models.filter(model=>model.visibility==='list').map(model=>{
-      const advertised=model.supported_reasoning_efforts ?? model.supported_reasoning_levels
-      const reasoningEfforts=advertised?.filter((effort):effort is ReasoningEffort=>validEfforts.has(effort as ReasoningEffort))
-      return {slug:model.slug,name:model.display_name,...(reasoningEfforts?{reasoningEfforts}:{})}
+      const hasReasoningMetadata=model.supported_reasoning_efforts!==undefined||model.supported_reasoning_levels!==undefined
+      const reasoningEfforts=[...new Set([
+        ...(normalizeReasoningEfforts(model.supported_reasoning_efforts)||[]),
+        ...(normalizeReasoningEfforts(model.supported_reasoning_levels)||[]),
+      ])]
+      return {slug:model.slug,name:model.display_name,...(hasReasoningMetadata?{reasoningEfforts}:{})}
     })
     this.modelCache={expiresAt:Date.now()+300000,models}
     return models
