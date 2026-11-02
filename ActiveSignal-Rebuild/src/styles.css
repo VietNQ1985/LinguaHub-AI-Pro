@@ -256,6 +256,29 @@ kbd { flex: none; padding: 2px 5px; color: #8e9bad; background: #fff; border: 1p
 .notice-banner { display: flex; align-items: flex-start; gap: 9px; margin-top: 15px; padding: 11px 13px; color: #758397; background: #f0f5fc; border: 1px solid #e2ebf8; border-radius: 9px; font-size: 9px; line-height: 1.55; }
 .notice-banner svg { flex: none; color: #5283cf; }
 
+.standard-page.zalo-page { display: flex; width: 100%; max-width: none; height: 100%; min-height: 0; flex-direction: column; padding-bottom: 14px; overflow: hidden; }
+.zalo-toolbar { display: flex; flex: none; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 14px; background: #fff; border: 1px solid #e8edf3; border-radius: 12px; box-shadow: 0 2px 10px rgba(20, 40, 70, .025); }
+.zalo-toolbar-copy { display: flex; min-width: 190px; align-items: center; gap: 11px; }
+.zalo-toolbar-icon { display: grid; width: 39px; height: 39px; flex: none; place-items: center; color: #fff; background: linear-gradient(145deg, #42a9f6, #3476da); border-radius: 12px; }
+.zalo-toolbar-text { min-width: 0; }
+.zalo-toolbar-text .integration-title { gap: 8px; }
+.zalo-toolbar-text .integration-title h3 { font-size: 13px; }
+.zalo-toolbar-text p { max-width: 480px; margin: 5px 0 0; color: #8793a4; font-size: 9px; line-height: 1.45; }
+.zalo-actions { display: flex; flex: none; align-items: center; justify-content: flex-end; gap: 7px; }
+.zalo-actions .primary-button, .zalo-actions .secondary-button { min-height: 32px; padding-right: 9px; padding-left: 9px; font-size: 9px; }
+.zalo-actions .text-action { padding: 7px 3px; font-size: 9px; white-space: nowrap; }
+.zalo-view-frame { position: relative; min-height: 190px; flex: 1; margin-top: 12px; overflow: hidden; background: #fff; border: 1px solid #dfe6ef; border-radius: 11px; box-shadow: var(--shadow); }
+.zalo-view-host { position: absolute; inset: 0; }
+.zalo-view-empty { position: absolute; inset: 0; display: flex; align-items: center; flex-direction: column; justify-content: center; gap: 8px; padding: 24px; color: #8b97a7; text-align: center; background: linear-gradient(145deg, #fff 0%, #f8faff 100%); }
+.zalo-view-empty > div { display: grid; width: 48px; height: 48px; place-items: center; color: #4d82d5; background: #eaf2ff; border-radius: 15px; }
+.zalo-view-empty strong { color: #56657a; font-size: 11px; }
+.zalo-view-empty span { max-width: 390px; font-size: 9px; line-height: 1.5; }
+.zalo-notice { flex: none; margin-top: 10px; padding: 8px 11px; font-size: 8px; }
+.theme-dark .zalo-toolbar, .theme-dark .zalo-view-frame { background: #202b3b; border-color: #344258; }
+.theme-dark .zalo-toolbar-text .integration-title h3, .theme-dark .zalo-view-empty strong { color: #d5dfed; }
+.theme-dark .zalo-toolbar-text p, .theme-dark .zalo-view-empty { color: #9dabc0; }
+.theme-dark .zalo-view-empty { background: linear-gradient(145deg, #202b3b 0%, #1b2636 100%); }
+
 .inbox-page { padding-bottom: 28px; }
 .inbox-shell { display: grid; height: min(620px, calc(100vh - 200px)); min-height: 390px; grid-template-columns: 265px minmax(0, 1fr) 190px; overflow: hidden; background: #fff; border: 1px solid #e8edf3; border-radius: 13px; box-shadow: var(--shadow); }
 .inbox-list-panel { display: flex; min-height: 0; flex-direction: column; border-right: 1px solid var(--line); }
@@ -443,6 +466,10 @@ kbd { flex: none; padding: 2px 5px; color: #8e9bad; background: #fff; border: 1p
   .task-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .task-board { grid-template-columns: 1fr; }
   .integration-decoration { right: -28px; opacity: .2; }
+  .zalo-toolbar { align-items: flex-start; flex-direction: column; }
+  .zalo-toolbar-copy { width: 100%; }
+  .zalo-actions { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
+  .zalo-view-frame { min-height: 160px; }
   .integration-hero { gap: 13px; padding: 20px; }
   .integration-symbol { width: 47px; height: 47px; border-radius: 14px; }
   .integration-title { align-items: flex-start; flex-direction: column; gap: 5px; }

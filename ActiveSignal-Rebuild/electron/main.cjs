@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, session, shell } = require("electron");
+const { app, BrowserWindow, WebContentsView, dialog, ipcMain, session, shell } = require("electron");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const { createZaloWindowManager, isAllowedZaloUrl, ZALO_PARTITION } = require("./zalo-window.cjs");
@@ -38,7 +38,10 @@ function createWindow() {
 
   mainWindow = window;
   window.on("closed", () => {
-    if (mainWindow === window) mainWindow = null;
+    if (mainWindow === window) {
+      zaloManager?.detach();
+      mainWindow = null;
+    }
   });
 
   if (!app.isPackaged && process.env.SIGNALDESK_DEV_URL) {
@@ -63,7 +66,7 @@ function createZaloManager() {
   const zaloSession = session.fromPartition(ZALO_PARTITION);
   zaloSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
   zaloManager = createZaloWindowManager({
-    BrowserWindow,
+    WebContentsView,
     shell,
     getParentWindow: () => mainWindow,
     getSession: () => zaloSession,
@@ -90,11 +93,14 @@ function createZaloManager() {
 }
 
 function registerIpc() {
-  const isTrustedRenderer = (event) => Boolean(mainWindow && event.sender === mainWindow.webContents);
+  const isTrustedRenderer = (event) => Boolean(mainWindow && !mainWindow.isDestroyed()
+    && event.sender === mainWindow.webContents
+    && event.senderFrame === mainWindow.webContents.mainFrame);
   ipcMain.handle("zalo:get-status", (event) => isTrustedRenderer(event) ? zaloManager?.getStatus() ?? { status: "closed", error: null } : { status: "closed", error: "Nguồn yêu cầu không hợp lệ." });
   ipcMain.handle("zalo:open", (event) => isTrustedRenderer(event) ? zaloManager?.open() ?? { status: "closed", error: null } : { status: "closed", error: "Nguồn yêu cầu không hợp lệ." });
   ipcMain.handle("zalo:focus", (event) => isTrustedRenderer(event) ? zaloManager?.focus() ?? { status: "closed", error: null } : { status: "closed", error: "Nguồn yêu cầu không hợp lệ." });
   ipcMain.handle("zalo:reload", (event) => isTrustedRenderer(event) ? zaloManager?.reload() ?? { status: "closed", error: null } : { status: "closed", error: "Nguồn yêu cầu không hợp lệ." });
+  ipcMain.handle("zalo:set-bounds", (event, bounds) => isTrustedRenderer(event) ? zaloManager?.setBounds(bounds) ?? false : false);
   ipcMain.handle("zalo:reset-session", (event) => isTrustedRenderer(event) ? zaloManager?.resetSession() ?? { cancelled: true, state: { status: "closed", error: null } } : { cancelled: true, state: { status: "closed", error: "Nguồn yêu cầu không hợp lệ." } });
 }
 
