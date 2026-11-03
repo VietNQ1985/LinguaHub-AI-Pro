@@ -37,7 +37,7 @@ export function AdvancedSettings() {
 
   return <div className="advanced-settings-content">
     <h4>Thông báo tin nhắn</h4>
-    <p className="helper-text">LinguaHub báo khi số chưa đọc do website cung cấp tăng. Anh mở từng tab trước; chưa hỗ trợ website không công bố số hoặc tin mới không làm thay đổi số đếm.</p>
+    <p className="helper-text">Bật quyền cho ứng dụng ở đây, rồi tải lại tab chat. Nếu WhatsApp hiện hướng dẫn bấm cạnh thanh địa chỉ, anh bấm OK để đóng: LinguaHub không có thanh địa chỉ, quyền được quản lý ngay tại các ô bên dưới. Website vẫn có cài đặt thông báo riêng.</p>
     <label className="checkbox-label"><input type="checkbox" checked={notifications.whatsapp} onChange={event => void updateNotification('whatsapp', event.target.checked)} /> Cho phép thông báo WhatsApp</label>
     <label className="checkbox-label"><input type="checkbox" checked={notifications.teams} onChange={event => void updateNotification('teams', event.target.checked)} /> Cho phép thông báo Teams</label>
     <label className="checkbox-label"><input type="checkbox" checked={notifications.zalo} onChange={event => void updateNotification('zalo', event.target.checked)} /> Cho phép thông báo Zalo Web</label>

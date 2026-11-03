@@ -13,7 +13,6 @@ import { isZaloStorageRequest, isSafeExternalWebUrl, isWorkspaceUrl } from '../s
 import { diagnostic } from './diagnostics'
 import { zaloDiagnosticHost, zaloNetworkDiagnostic, zaloBlockedNavigationDiagnostic } from './zalo-diagnostic'
 import {unreadFromTitle} from '../shared/workspace-unread'
-import {showWorkspaceAlert} from './workspace-alert'
 import {restoreWindow,saveWindow} from './window-state'
 import { canShowWorkspaceNotification, isNotificationOrigin, type WorkspaceService } from './notification-policy'
 import { hasCloudConsentForTask } from './cloud-consent'
@@ -438,17 +437,13 @@ app.whenReady().then(async () => {
     view = new WebContentsView({ webPreferences: { preload: join(import.meta.dirname, '../preload/chat-view.cjs'), partition: `persist:linguahub-${service}`, nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false } })
     views.set(service, view)
     const serviceContents=view.webContents
-    let unreadInitialized=false
     const updateUnread=(title:string)=>{
       if(!isWorkspaceUrl(service,serviceContents.getURL()))return
       const count=unreadFromTitle(title)
-      const initial=!unreadInitialized;unreadInitialized=true
       if(unreadCounts[service]===count)return
-      const previous=unreadCounts[service]
       unreadCounts[service]=count
-      if(!initial&&count>previous&&notificationPermissions[service]&&Notification.isSupported()){
-        showWorkspaceAlert(service,count,activateWorkspace)
-      }
+      // Native website notifications remain responsible for delivery; do not
+      // create a second toast from the unread title counter.
       if(!window.isDestroyed())window.webContents.send('workspace:unread-changed',{...unreadCounts})
     }
     serviceContents.on('page-title-updated',(_event,title)=>updateUnread(title))
@@ -464,13 +459,19 @@ app.whenReady().then(async () => {
     serviceContents.on('did-start-navigation',(_event,_url,_inPlace,isMainFrame)=>{if(isMainFrame&&meetingSession?.contents===serviceContents)stopMeeting()})
     const zaloAuthContents=new Set<Electron.WebContents>()
     let zaloStorageAllowed=false
+    serviceContents.on('focus',()=>{if(view?.webContents!==serviceContents||!window.isVisible()||window.isMinimized())activateWorkspace(service)})
     serviceContents.session.setPermissionCheckHandler((contents,permission,origin,details)=>{
-      if(permission==='notifications')return false
+      if(permission==='notifications')return canShowWorkspaceNotification(service,permission,origin,notificationPermissions[service],contents===null||contents===serviceContents)
       if(service==='zalo')return zaloStorageAllowed&&isZaloStorageRequest(permission,serviceContents.getURL(),origin,contents===serviceContents||!!contents&&zaloAuthContents.has(contents))&&(!details.embeddingOrigin||isWorkspaceUrl('zalo',details.embeddingOrigin))
       return canShowWorkspaceNotification(service,permission,origin,notificationPermissions[service],contents===null || contents===serviceContents)
     })
     serviceContents.session.setPermissionRequestHandler(async(contents,permission,callback,details)=>{
-      if(permission==='notifications'){callback(false);return}
+      if(permission==='notifications'){
+        const origin=details.requestingUrl||contents?.getURL()||''
+        if((contents!==null&&contents!==serviceContents)||!isNotificationOrigin(service,origin)){callback(false);return}
+        try{callback(await grantNotificationPermission(service))}catch{callback(false)}
+        return
+      }
       if(service==='zalo'){
         const origin=details.requestingUrl||''
         if(!isZaloStorageRequest(permission,serviceContents.getURL(),origin,contents===serviceContents||!!contents&&zaloAuthContents.has(contents))){callback(false);return}
@@ -479,7 +480,7 @@ app.whenReady().then(async () => {
       }
       callback(false)
     })
-    if(service==='teams')installTeamsMeetingPermissions(serviceContents,window,()=>false,async()=>false)
+    if(service==='teams')installTeamsMeetingPermissions(serviceContents,window,()=>notificationPermissions.teams,()=>grantNotificationPermission('teams'))
     // Keep the real Chromium version; remove application-specific product tokens
     // that legacy browser-version parsers can mistake for the browser version.
     const chromiumUserAgent = view.webContents.getUserAgent()

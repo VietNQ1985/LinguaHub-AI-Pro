@@ -1,5 +1,12 @@
 # Khay hệ thống, thông báo và mặc định dịch
 
+## Bản sửa sau phản hồi WhatsApp
+
+Ảnh người dùng xác nhận WhatsApp báo quyền notifications bị chặn và hướng dẫn biểu tượng thanh địa chỉ không tồn tại trong LinguaHub. Đã bỏ cơ chế từ chối notifications của website; trả lại check/request theo quyền và origin của từng workspace, gồm Zalo Web. Bật quyền trong Cài đặt nâng cao rồi tải lại tab. Nếu trang chủ động requestPermission, LinguaHub hỏi qua dialog riêng. Không tự cấp quyền camera/microphone hay origin đăng nhập Zalo. Teams dùng policy thiết bị cũ với callback quyền notification thật.
+
+Đã bỏ toast phụ sinh từ title để không tạo trùng; title vẫn dùng cho huy hiệu. Sự kiện focus của WebContents đưa về đúng workspace và mở lại cửa sổ nếu bị ẩn/minimize. Chưa xác nhận click toast native/service worker thực tế, nên lỗi click không được coi là đã khắc phục hoàn toàn. Các mô tả cơ chế toast-owned phía dưới là lịch sử bản trước, đã được thay thế bởi bản sửa này. Typecheck, 7 test policy/shortcut/store và build đạt.
+
+
 - Đã gỡ Zalo PC, helper native, IPC và phần dịch nhập tay đi kèm. Giữ nguyên phiên Zalo Web; không xóa dữ liệu của Zalo PC trên máy.
 - Nút thu gọn trên thanh công cụ và nút đóng cửa sổ đưa LinguaHub xuống system tray nếu tạo được icon. Nhấp đúp icon để mở; menu cho mở từng workspace hoặc **Thoát hoàn toàn**. Nếu không tạo được tray, nút đóng vẫn thoát, tránh app ẩn không khôi phục được. Không tự khởi động theo Windows.
 - Cài đặt nâng cao có quyền thông báo cho WhatsApp, Teams, Zalo Web, lưu riêng từng dịch vụ. Các quyền cũ giữ nguyên; Zalo mặc định chưa cấp cho đến khi người dùng bật. Đây là thông báo của LinguaHub khi số chưa đọc trong tiêu đề website tăng; chỉ có tên ứng dụng và số đếm, không có người gửi/nội dung. Không tự đọc tin nhắn để tạo thông báo.
