@@ -36,3 +36,6 @@ Test policy audio/video/deny/untrusted/navigation/screen frame/source/cancel; ca
 - Chưa tham gia cuộc họp thực tế, không có screenshot Teams/live caption thật. Chưa cài/launch NSIS trên Windows.
 
 - npm run dist thành công, NSIS Windows x64 được tạo, chưa ký số và chưa cài/launch. SHA-256: 822972f66d0ad0282e6f38a73a41186cfa531f8425abd30beba12aa1d2c39f17.
+
+## Phản hồi selector phụ đề
+Ảnh tiếp theo đã xác nhận đúng mode và có caption hiện, nhưng adapter không đọc được. Thêm các biến thể closed-caption-v2 container/window-wrapper/renderer/utterance/text-content. Chẩn đoán chỉ trả marker caption đang hiển thị và số iframe, không trả lời nói trong diagnostics/log. Các biến thể mới được test fixture, vẫn chưa đối chiếu DOM Teams thực tế. Nếu còn lỗi: Bắt đầu dịch, mở Chẩn đoán phụ đề và gửi marker/số iframe để sửa có bằng chứng.
