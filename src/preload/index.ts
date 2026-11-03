@@ -44,7 +44,7 @@ contextBridge.exposeInMainWorld('lingua', {
   },
   listModels: () => ipcRenderer.invoke('ai:models'),
   writeClipboardText: (text:string) => ipcRenderer.invoke('clipboard:write-text',text),
-  runAi: (task: string, text: string, model: string, requestId?: string) => ipcRenderer.invoke('ai:run', task, text, model, requestId),
+  runAi: (task: string, text: string, model: string, requestId?: string, options?: {replyFast:boolean}) => ipcRenderer.invoke('ai:run', task, text, model, requestId, options),
   onAiStream: (requestId:string,callback:(delta:string)=>void) => {
     const listener=(_event:Electron.IpcRendererEvent,message:{requestId:string;delta:string})=>{if(message.requestId===requestId&&typeof message.delta==='string')callback(message.delta)}
     ipcRenderer.on('ai:stream',listener)

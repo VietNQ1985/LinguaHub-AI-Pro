@@ -1,3 +1,4 @@
+import { SpeechPlayback } from './SpeechPlayback'
 import { useState } from 'react'
 import { z } from 'zod'
 const translationSchema = z.object({ translation:z.string(), explanation:z.string() })
@@ -7,12 +8,11 @@ const repliesSchema = z.object({ replies:z.array(z.object({ style:z.enum(['simpl
 const coachSchema = z.object({ meaning:z.string(), grammar:z.string(), ipa:z.string(), pronunciationHint:z.string(), stress:z.string(), alternatives:z.array(z.string()), commonMistakes:z.array(z.string()), vocabulary:z.array(z.object({term:z.string(),meaning:z.string()})) })
 function Sentence({text}:{text:string}) {
   const [status,setStatus] = useState('')
-  const speak = (locale:'en-US'|'en-GB') => { if (!('speechSynthesis' in window)) {setStatus('Máy chưa hỗ trợ đọc văn bản.');return} speechSynthesis.cancel();const speech=new SpeechSynthesisUtterance(text);speech.lang=locale;speech.rate=.85;speechSynthesis.speak(speech) }
   const copy = async () => {
     try { await window.lingua.writeClipboardText(text); setStatus('Đã sao chép') }
     catch { setStatus('Không sao chép được. Anh thử lại.') }
   }
-  return <><p>{text}</p><button type="button" onClick={()=>void copy()}>Sao chép câu</button><button type="button" onClick={()=>speak('en-US')}>Nghe giọng US</button><button type="button" onClick={()=>speak('en-GB')}>Nghe giọng UK</button><small role="status">{status}</small></>
+  return <><p>{text}</p><button type="button" onClick={()=>void copy()}>Sao chép câu</button><SpeechPlayback text={text}/><small role="status">{status}</small></>
 }
 export function AiResult({result}:{result:unknown}) {
   const risks=riskSchema.safeParse(result)

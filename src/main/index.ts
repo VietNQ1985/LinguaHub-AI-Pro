@@ -284,14 +284,21 @@ app.whenReady().then(async () => {
     return {conversationId,messages,text:messages.map(item=>item.text).join('\n')}
   })
   ipcMain.handle('ai:models', (event) => { trusted(event); return listLocalModels() })
-  ipcMain.handle('ai:run', async (event, task: AiTask, text: string, model: string, requestId?: unknown) => {
+  ipcMain.handle('ai:run', async (event, task: AiTask, text: string, model: string, requestId?: unknown, options?:unknown) => {
     trusted(event)
     if(typeof model!=='string'||typeof text!=='string'||(requestId!==undefined&&(typeof requestId!=='string'||requestId.length<1||requestId.length>100)))throw new Error('Nội dung không hợp lệ')
+    if(options!==undefined&&(!options||typeof options!=='object'||typeof (options as {replyFast?:unknown}).replyFast!=='boolean'||Object.keys(options).some(key=>key!=='replyFast')))throw new Error('Cấu hình gợi ý không hợp lệ.')
     if(masking)text=maskSensitive(text)
     if(model.startsWith('chatgpt:')&&!hasCloudConsentForTask(task,cloudConsent,backgroundCloudConsent))throw new Error(task==='translateLatest'||task==='translateMessages'?'Anh cần cho phép gửi chữ tin nhắn hiển thị đến ChatGPT trước.':'Anh cần cho phép xử lý cloud trước khi gửi nội dung.')
-    const reasoningEffort=model.startsWith('chatgpt:')&&isGpt6Model(model.slice(8))
+    let reasoningEffort=model.startsWith('chatgpt:')&&isGpt6Model(model.slice(8))
       ? reasoningEffortForTask(task,learning.getReasoningEffort(),learning.getTranslationReasoningEffort(),learning.getFastMode(),FAST_REASONING_EFFORT)
       : undefined
+    if(model.startsWith('chatgpt:')&&(task==='reply'||task==='replyFromChat')&&(options as {replyFast?:boolean}|undefined)?.replyFast){
+      const allowed=(await chatgpt.listModels()).find(item=>item.slug===model.slice(8))?.reasoningEfforts
+      const fast=allowed?.includes('low')?'low':allowed?.includes('medium')?'medium':undefined
+      if(!fast)throw new Error('Model chưa công bố hỗ trợ Low/Medium. Anh tắt Trả lời nhanh để tiếp tục.')
+      reasoningEffort=fast
+    }
     const controller=new AbortController()
     const id=typeof requestId==='string'?requestId:null
     if(id && aiRequests.has(id))throw new Error('Mã yêu cầu AI đang được dùng.')
