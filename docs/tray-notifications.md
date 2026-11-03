@@ -12,3 +12,5 @@ Kiểm thử tự động: cấu hình notification Zalo được lưu/reset; or
 Validation: npm run typecheck đạt; toàn bộ 28 file/103 test đạt, sau đó thêm regression từ chối quyền/kết quả cấp quyền lỗi thời và chạy LiveTranslation.test.tsx 2/2 đạt. npm run build đạt. Đóng gói bản cuối ở release-final để tránh ghi đè job đóng gói trước đó. Chưa cài hoặc mở bản mới, không kiểm thử cloud thật hay thao tác thông báo Windows thật.
 
 Kiểm tra archive phát hiện helper cũ còn trong out/native từ build trước. Quy tắc đóng gói đã đổi sang chỉ lấy main/preload/renderer, loại output native cũ. Bản giao cuối dùng release-tray. Không phân phối các gói trung gian release/release-final.
+
+Installer cuối release-tray/LinguaHub-AI-Pro-Setup.exe đóng gói thành công. SHA-256: 79c780b87045b3a5f3fcc6cf9a0011fdd911e8227f9fd7deb1946ad27faffd10. Đối chiếu main/preload/renderer HTML khớp build hiện tại, không có ZaloCompanion hoặc out/native trong archive. Chưa cập nhật bản đang cài, chưa xác minh tray/click toast end-to-end trên Windows.
