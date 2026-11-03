@@ -188,3 +188,8 @@ h2, h3, h4 { color: var(--text); }
 .advanced-settings-content button { padding: 9px 12px; margin-top: 7px; border: 1px solid var(--border); border-radius: 8px; background: var(--soft); color: var(--text); font-size: 13px; }
 .advanced-settings-content select { width: 100%; padding: 10px; border-radius: 8px; background: var(--surface); border: 1px solid var(--border); color: var(--text); }
 .advanced-settings-content .danger-button { color: var(--error); }
+
+.speech-controls { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.speech-controls label { font-size:12px; display:flex; gap:4px; align-items:center; }
+.speech-controls input { width:80px; }
+.speech-controls small { flex-basis:100%; }

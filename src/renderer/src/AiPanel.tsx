@@ -1,3 +1,4 @@
+import { stopReplyPlayback } from './SpeechPlayback'
 import { useEffect, useRef, useState } from 'react'
 import { LiveTranslation } from './LiveTranslation'
 import { AiResult } from './AiResult'
@@ -53,6 +54,23 @@ export function AiPanel() {
   const [error, setError] = useState('')
   const [masking, setMasking] = useState(true)
   const requestGeneration = useRef(0)
+  const activeReply = useRef<string | null>(null)
+  const intentRef = useRef<HTMLTextAreaElement>(null)
+  const [voiceHelp,setVoiceHelp]=useState(false)
+  const [replyFast,setReplyFast]=useState(false)
+  const invalidateReply=()=>{
+    requestGeneration.current++
+    if(activeReply.current)void window.lingua.cancelAi(activeReply.current).catch(()=>{})
+    activeReply.current=null
+    setBusy(false);setOutput(null);stopReplyPlayback()
+  }
+  useEffect(()=>{
+    const reset=()=>invalidateReply()
+    window.addEventListener('linguahub:workspace',reset)
+    window.addEventListener('linguahub:dashboard',reset)
+    return ()=>{requestGeneration.current++;window.removeEventListener('linguahub:workspace',reset);window.removeEventListener('linguahub:dashboard',reset);if(activeReply.current)void window.lingua.cancelAi(activeReply.current).catch(()=>{});stopReplyPlayback()}
+  },[])
+  useEffect(()=>{invalidateReply()},[model,mode])
 
   useEffect(() => {
     let active = true
@@ -143,16 +161,26 @@ export function AiPanel() {
     setBusy(true)
     setError('')
     setOutput(null)
+    let contextTimer:ReturnType<typeof setInterval>|undefined
     try {
+      const initial=await window.lingua.hasVisibleChatReadAuthorization()?await window.lingua.readVisibleChat():null
+      if(initial){
+        let checking=false
+        contextTimer=setInterval(()=>{if(checking)return;checking=true;void window.lingua.readVisibleChat().then(next=>{if(generation===requestGeneration.current&&next?.conversationId!==initial.conversationId)invalidateReply()}).catch(()=>{if(generation===requestGeneration.current)invalidateReply()}).finally(()=>{checking=false})},350)
+      }
       if (model.startsWith('chatgpt:') && !(await window.lingua.allowCloud())) {
         if (generation === requestGeneration.current) setError('Anh chưa cho phép xử lý nội dung bằng ChatGPT.')
         return
       }
-      const result = await window.lingua.runAi('reply', input, model)
-      if (generation === requestGeneration.current) setOutput(result)
+      if(generation!==requestGeneration.current)return
+      const requestId=crypto.randomUUID();activeReply.current=requestId
+      const result = await window.lingua.runAi('reply', input, model, requestId, {replyFast})
+      const latest=initial?await window.lingua.readVisibleChat():null
+      if (generation === requestGeneration.current && (!initial||latest?.conversationId===initial.conversationId)) setOutput(result)
     } catch (failure) {
       if (generation === requestGeneration.current) setError(failure instanceof Error ? failure.message : 'Chưa tạo được gợi ý. Anh thử lại.')
     } finally {
+      if(contextTimer!==undefined)clearInterval(contextTimer)
       if (generation === requestGeneration.current) setBusy(false)
     }
   }
@@ -175,9 +203,21 @@ export function AiPanel() {
         if (generation === requestGeneration.current) setError('Anh chưa cho phép gửi chữ chat đang hiển thị đến ChatGPT.')
         return
       }
-      const requestId = crypto.randomUUID()
-      const result = await window.lingua.runAi('replyFromChat', JSON.stringify({ messages, intent: input.trim() || undefined }), model, requestId)
-      if (generation === requestGeneration.current) setOutput(result)
+      if(generation!==requestGeneration.current)return
+      const current=await window.lingua.readVisibleChat()
+      if(!snapshot || !current || current.conversationId!==snapshot.conversationId)return
+      const requestId = crypto.randomUUID();activeReply.current=requestId
+      let checking=false
+      const timer=setInterval(()=>{
+        if(checking)return
+        checking=true
+        void window.lingua.readVisibleChat().then(next=>{if(generation===requestGeneration.current&&(!next||next.conversationId!==snapshot.conversationId))invalidateReply()}).catch(()=>{if(generation===requestGeneration.current)invalidateReply()}).finally(()=>{checking=false})
+      },350)
+      try {
+        const result = await window.lingua.runAi('replyFromChat', JSON.stringify({ messages, intent: input.trim() || undefined }), model, requestId, {replyFast})
+        const latest=await window.lingua.readVisibleChat()
+        if(generation===requestGeneration.current&&latest?.conversationId===snapshot.conversationId)setOutput(result)
+      } finally {clearInterval(timer)}
     } catch (failure) {
       if (generation === requestGeneration.current) setError(failure instanceof Error ? failure.message : 'Chưa tạo được gợi ý từ cuộc trò chuyện. Anh thử lại.')
     } finally {
@@ -197,12 +237,15 @@ export function AiPanel() {
       {/* Keep the translation component mounted: changing tabs or hiding the panel must not stop visible chat reading. */}
       <div style={{ display: mode === 'translate' ? 'block' : 'none' }} aria-hidden={mode !== 'translate'}>
         <LiveTranslation model={model} />
-        <details className="reply-suggestions">
+        <details className="reply-suggestions" onToggle={event=>{if(!event.currentTarget.open)invalidateReply()}}>
           <summary>Gợi ý trả lời</summary>
           <div className="reply-view">
             <p className="helper-text">AI đọc các tin nhắn đang hiển thị để gợi ý cách trả lời bằng tiếng Anh. Anh có thể thêm ý riêng hoặc để trống.</p>
             <label htmlFor="reply-input">Ý anh muốn bổ sung (không bắt buộc)</label>
-            <textarea id="reply-input" value={input} maxLength={2000} onChange={event => { setInput(event.target.value); setOutput(null); requestGeneration.current++; setBusy(false) }} placeholder="Ví dụ: Tôi sẽ kiểm tra lại và phản hồi vào sáng mai." />
+            <textarea ref={intentRef} id="reply-input" value={input} maxLength={2000} onChange={event => { setInput(event.target.value); invalidateReply() }} placeholder="Ví dụ: Tôi sẽ kiểm tra lại và phản hồi vào sáng mai." />
+            <button type="button" onClick={()=>{intentRef.current?.focus();setVoiceHelp(true)}}>🎙 Nhập giọng nói Windows (Win+H)</button>
+            {voiceHelp && <p role="status" className="helper-text">Đặt ngôn ngữ bàn phím là Tiếng Việt, nhấn Win+H rồi nói. Windows quản lý quyền microphone và có thể dùng xử lý trực tuyến theo cài đặt của anh. Dừng hoặc đóng thanh Win+H để kết thúc. LinguaHub chưa tích hợp STT cục bộ, không thu hay lưu âm thanh. Anh sửa chữ trong ô rồi tự bấm tạo gợi ý.</p>}
+            <label className="checkbox-label"><input type="checkbox" checked={replyFast} onChange={event=>{invalidateReply();setReplyFast(event.target.checked)}} /> Trả lời nhanh (Low/Medium nếu model hỗ trợ)</label>
             {!model && <p className="helper-text">Anh hãy chọn dịch vụ AI trong phần Cài đặt.</p>}
             <button type="button" className="primary-button" disabled={!model || busy} onClick={() => void sendContextualReplyRequest()}>{busy ? 'Đang đọc chat và tạo gợi ý…' : 'Đọc chat & gợi ý trả lời'}</button>
             {input.trim() && <button type="button" className="secondary-button reply-manual-button" disabled={!model || busy} onClick={() => void sendReplyRequest()}>Chỉ dùng ý tôi nhập</button>}

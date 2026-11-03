@@ -50,7 +50,7 @@ declare global {
       chatgptStatus(): Promise<{ connected: boolean; email: string | null; usageEnabled: boolean }>
       listModels(): Promise<string[]>
       writeClipboardText(text: string): Promise<boolean>
-      runAi(task: string, text: string, model: string, requestId?: string): Promise<unknown>
+      runAi(task: string, text: string, model: string, requestId?: string, options?: {replyFast:boolean}): Promise<unknown>
       onAiStream(requestId: string, callback: (delta: string) => void): () => void
       cancelAi(requestId: string): Promise<boolean>
     }
