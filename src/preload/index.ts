@@ -42,6 +42,10 @@ contextBridge.exposeInMainWorld('lingua', {
     ipcRenderer.on('chat:visible-changed',listener)
     return ()=>ipcRenderer.removeListener('chat:visible-changed',listener)
   },
+  startMeeting: (model:string)=>ipcRenderer.invoke('meeting:start',model),
+  readMeeting: (token:string)=>ipcRenderer.invoke('meeting:read',token),
+  stopMeeting: (token:string)=>ipcRenderer.invoke('meeting:stop',token),
+  translateMeeting: (token:string,text:string,id:string)=>ipcRenderer.invoke('meeting:translate',token,text,id),
   listModels: () => ipcRenderer.invoke('ai:models'),
   writeClipboardText: (text:string) => ipcRenderer.invoke('clipboard:write-text',text),
   runAi: (task: string, text: string, model: string, requestId?: string, options?: {replyFast:boolean}) => ipcRenderer.invoke('ai:run', task, text, model, requestId, options),

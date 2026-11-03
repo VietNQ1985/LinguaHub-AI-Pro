@@ -48,6 +48,10 @@ declare global {
       connectChatGPT(): Promise<{ connected: boolean; email: string | null; usageEnabled: boolean }>
       connectChatGPTNewWorkspace(): Promise<{ connected: boolean; email: string | null; usageEnabled: boolean } | null>
       chatgptStatus(): Promise<{ connected: boolean; email: string | null; usageEnabled: boolean }>
+      startMeeting(model:string):Promise<string|null>
+      readMeeting(token:string):Promise<{session:string|null;segments:Array<{id:string;text:string;speaker:string;timestamp:number}>}>
+      stopMeeting(token:string):Promise<void>
+      translateMeeting(token:string,text:string,id:string):Promise<{translation:string}>
       listModels(): Promise<string[]>
       writeClipboardText(text: string): Promise<boolean>
       runAi(task: string, text: string, model: string, requestId?: string, options?: {replyFast:boolean}): Promise<unknown>

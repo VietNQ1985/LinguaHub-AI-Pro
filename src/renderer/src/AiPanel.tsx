@@ -1,3 +1,4 @@
+import { MeetingTranslation } from './MeetingTranslation'
 import { stopReplyPlayback } from './SpeechPlayback'
 import { useEffect, useRef, useState } from 'react'
 import { LiveTranslation } from './LiveTranslation'
@@ -40,6 +41,7 @@ function modelLabel(value: string) {
 }
 
 export function AiPanel() {
+  const [meetingMode,setMeetingMode]=useState(false)
   const [mode, setMode] = useState<PanelMode>('translate')
   const [model, setModel] = useState('')
   const [reasoningEffort, setReasoningEffort] = useState<ReasoningEffort>(DEFAULT_REASONING_EFFORT)
@@ -228,8 +230,11 @@ export function AiPanel() {
     </div>
 
     <div className="assistant-content">
+      <div className="meeting-modes"><button type="button" aria-pressed={!meetingMode} onClick={()=>{invalidateReply();setMeetingMode(false)}}>Dịch tin nhắn</button><button type="button" aria-pressed={meetingMode} onClick={()=>{invalidateReply();setMeetingMode(true)}}>Dịch cuộc họp</button></div>
+      {meetingMode&&mode==='translate'&&<MeetingTranslation model={model}/>}
+
       {/* Keep the translation component mounted: changing tabs or hiding the panel must not stop visible chat reading. */}
-      <div style={{ display: mode === 'translate' ? 'block' : 'none' }} aria-hidden={mode !== 'translate'}>
+      <div style={{ display: mode === 'translate' && !meetingMode ? 'block' : 'none' }} aria-hidden={mode !== 'translate'}>
         <LiveTranslation model={model} />
         <details className="reply-suggestions" onToggle={event=>{if(!event.currentTarget.open)invalidateReply()}}>
           <summary>Gợi ý trả lời</summary>

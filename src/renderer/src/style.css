@@ -193,3 +193,8 @@ h2, h3, h4 { color: var(--text); }
 .speech-controls label { font-size:12px; display:flex; gap:4px; align-items:center; }
 .speech-controls input { width:80px; }
 .speech-controls small { flex-basis:100%; }
+
+.meeting-panel {padding:12px;}
+.meeting-modes {display:flex;gap:6px;padding:8px 12px;}
+.meeting-transcript {max-height:65vh;overflow:auto;display:flex;flex-direction:column;gap:8px;}
+.meeting-panel button {margin:4px;padding:8px;}

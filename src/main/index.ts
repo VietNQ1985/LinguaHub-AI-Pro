@@ -1,5 +1,7 @@
+import { meetingCaptionScript } from './meeting-captions'
+import { trustedTeamsOrigin, installTeamsMeetingPermissions } from './teams-meeting-permissions'
 import { app, BrowserWindow, WebContentsView, ipcMain, shell, Notification, dialog, clipboard } from 'electron'
-import { createHash } from 'node:crypto'
+import { randomUUID, createHash } from 'node:crypto'
 import { existsSync, mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { listLocalModels, reasoningEffortForTask, runLocalAi, type AiTask } from './ai'
@@ -141,6 +143,31 @@ app.whenReady().then(async () => {
     try{const result=await dialog.showMessageBox(window,{type:'question',message:'Cho phép microphone để luyện nói?',detail:'Thu âm cục bộ, tối đa 60 giây. Không gửi bản thu đến AI.',buttons:['Hủy','Cho phép'],defaultId:0,cancelId:0});microphoneAllowed=result.response===1;callback(microphoneAllowed)}catch{callback(false)}
   })
   const trusted = (event: Electron.IpcMainInvokeEvent) => { if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error('Untrusted sender') }
+  let meetingSession:{token:string;contents:Electron.WebContents;model:string;cloud:boolean}|null=null
+  const stopMeeting=()=>{meetingSession=null;for(const [id,controller] of aiRequests)if(id.startsWith('meeting-')){controller.abort();aiRequests.delete(id)}}
+  ipcMain.handle('meeting:start',async(event,model:unknown)=>{
+    trusted(event)
+    if(typeof model!=='string'||!model||model.length>200||currentWorkspaceService!=='teams'||!view||!view.getVisible())throw new Error('Anh mở Teams trước khi dịch cuộc họp.')
+    const contents=view.webContents
+    if(!trustedTeamsOrigin(contents.getURL()))throw new Error('Trang Teams chưa được xác minh.')
+    const read=await dialog.showMessageBox(window,{type:'question',title:'Đọc phụ đề cuộc họp',message:'Cho phép đọc chữ phụ đề Teams đang hiển thị?',detail:'Anh tự bật phụ đề tiếng Anh trong Teams. Tuân thủ chính sách cuộc họp và thông báo cho người tham gia khi cần. Không thu âm; không lưu transcript tự động.',buttons:['Hủy','Cho phép'],defaultId:0,cancelId:0})
+    if(read.response!==1)return null
+    let cloud=false
+    if(model.startsWith('chatgpt:')){const consent=await dialog.showMessageBox(window,{type:'question',title:'Dịch phụ đề bằng ChatGPT',message:'Gửi chữ phụ đề đang hiển thị đến OpenAI để dịch?',detail:'Đây là quyền riêng cho cuộc họp, không dùng quyền chat hoặc nội dung nhập tay. Không gửi âm thanh. Dừng dịch để thu hồi quyền phiên này.',buttons:['Hủy','Cho phép'],defaultId:0,cancelId:0});if(consent.response!==1)return null;cloud=true}
+    if(currentWorkspaceService!=='teams'||view?.webContents!==contents||contents.isDestroyed())return null
+    stopMeeting();const token=randomUUID();meetingSession={token,contents,model,cloud};return token
+  })
+  const validMeeting=(token:unknown)=>{const state=meetingSession;if(typeof token!=='string'||!state||state.token!==token||state.contents.isDestroyed()||!window.isVisible()||window.isMinimized()||currentWorkspaceService!=='teams'||view?.webContents!==state.contents||!view.getVisible()||!trustedTeamsOrigin(state.contents.getURL()))throw new Error('Phiên dịch cuộc họp đã dừng.');return state}
+  ipcMain.handle('meeting:read',async(event,token:unknown)=>{trusted(event);const state=validMeeting(token);return state.contents.executeJavaScript(meetingCaptionScript())})
+  ipcMain.handle('meeting:stop',(event,token:unknown)=>{trusted(event);if(meetingSession?.token===token)stopMeeting()})
+  ipcMain.handle('meeting:translate',async(event,token:unknown,text:unknown,id:unknown)=>{
+    trusted(event);const state=validMeeting(token)
+    if(typeof text!=='string'||text.length<2||text.length>4000||typeof id!=='string'||!/^meeting-[a-zA-Z0-9-]{1,80}$/.test(id)||aiRequests.has(id))throw new Error('Đoạn phụ đề không hợp lệ.')
+    if(state.model.startsWith('chatgpt:')&&!state.cloud)throw new Error('Chưa cấp quyền cloud cho cuộc họp.')
+    const controller=new AbortController();aiRequests.set(id,controller)
+    try{return await runLocalAi('translateLatest',JSON.stringify({text:masking?maskSensitive(text):text}),state.model.startsWith('chatgpt:')?state.model.slice(8):state.model,state.model.startsWith('chatgpt:')?(model,input,instructions,signal)=>chatgpt.respond(model,input,instructions,signal,'low'):undefined,controller.signal)}finally{aiRequests.delete(id)}
+  })
+
   ipcMain.handle('clipboard:write-text',(event,value:unknown)=>{
     trusted(event)
     if(typeof value!=='string'||value.length>50000)throw new Error('Nội dung sao chép không hợp lệ.')
@@ -149,6 +176,7 @@ app.whenReady().then(async () => {
   })
   ipcMain.handle('workspace:reload',async event=>{
     trusted(event)
+    stopMeeting()
     if(!view || view.webContents.isDestroyed())throw new Error('Anh mở workspace trước.')
     const current=view
     const url=current.webContents.getURL()
@@ -174,6 +202,7 @@ app.whenReady().then(async () => {
     trusted(event)
     const answer=await dialog.showMessageBox(window,{type:'warning',title:'Xóa toàn bộ dữ liệu LinguaHub trên máy này?',message:'Xóa tài khoản và dữ liệu đã lưu trong LinguaHub?',detail:'App sẽ thử thu hồi token ChatGPT, đăng xuất WhatsApp và Teams, rồi xóa từ vựng, tiến độ học, quyền thông báo và cài đặt. Anh sẽ cần đăng nhập lại. Không thể hoàn tác.',buttons:['Hủy','Xóa toàn bộ dữ liệu'],defaultId:0,cancelId:0})
     if(answer.response!==1)return false
+    stopMeeting()
     cloudConsent=false
     backgroundCloudConsent=false
     chatReadAuthorized=false
@@ -216,7 +245,7 @@ app.whenReady().then(async () => {
     backgroundCloudConsent=answer.response===1
     return backgroundCloudConsent
   })
-  ipcMain.handle('chatgpt:disconnect',async event=>{trusted(event);await learning.setManualCloudConsent(false);cloudConsent=false;backgroundCloudConsent=false;return chatgpt.disconnect()})
+  ipcMain.handle('chatgpt:disconnect',async event=>{trusted(event);stopMeeting();await learning.setManualCloudConsent(false);cloudConsent=false;backgroundCloudConsent=false;return chatgpt.disconnect()})
   ipcMain.handle('chatgpt:models',event=>{trusted(event);return chatgpt.listModels()})
   ipcMain.handle('chatgpt:usage-settings',event=>{trusted(event);return shell.openExternal('https://chatgpt.com/settings/usage')})
   ipcMain.handle('chatgpt:connect',event=>{trusted(event);return chatgpt.connect()})
@@ -231,6 +260,7 @@ app.whenReady().then(async () => {
     })
     if(answer.response!==1)return null
     await learning.setManualCloudConsent(false)
+    stopMeeting()
     cloudConsent=false
     backgroundCloudConsent=false
     return chatgpt.connect(true)
@@ -365,6 +395,7 @@ app.whenReady().then(async () => {
   })
   ipcMain.handle('workspace:open', (event, service: keyof typeof sites) => {
     trusted(event)
+    stopMeeting()
     if (!Object.hasOwn(sites, service)) throw new Error('Invalid service')
     currentWorkspaceService=service
     for (const existing of views.values()) { existing.webContents.send('chat:observer-control',false); existing.setVisible(false) }
@@ -379,6 +410,7 @@ app.whenReady().then(async () => {
     view = new WebContentsView({ webPreferences: { preload: join(import.meta.dirname, '../preload/chat-view.cjs'), partition: `persist:linguahub-${service}`, nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false } })
     views.set(service, view)
     const serviceContents=view.webContents
+    serviceContents.on('did-start-navigation',(_event,_url,_inPlace,isMainFrame)=>{if(isMainFrame&&meetingSession?.contents===serviceContents)stopMeeting()})
     serviceContents.session.setPermissionCheckHandler((contents,permission,origin)=>canShowWorkspaceNotification(service,permission,origin,notificationPermissions[service],contents===null || contents===serviceContents))
     serviceContents.session.setPermissionRequestHandler(async(contents,permission,callback,details)=>{
       const origin=details.requestingUrl || contents?.getURL() || ''
@@ -386,6 +418,7 @@ app.whenReady().then(async () => {
       if(notificationPermissions[service]){callback(true);return}
       try{callback(await grantNotificationPermission(service))}catch{callback(false)}
     })
+    if(service==='teams')installTeamsMeetingPermissions(serviceContents,window,()=>notificationPermissions.teams,()=>grantNotificationPermission('teams'))
     // Keep the real Chromium version; remove application-specific product tokens
     // that legacy browser-version parsers can mistake for the browser version.
     const chromiumUserAgent = view.webContents.getUserAgent()
@@ -411,6 +444,7 @@ app.whenReady().then(async () => {
   })
   ipcMain.handle('workspace:dashboard', event => {
     trusted(event)
+    stopMeeting()
     chatReadAuthorized=false
     backgroundCloudConsent=false
     clearChatMutationDebounces()
