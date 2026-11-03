@@ -2,7 +2,8 @@ export function isWorkspaceUrl(service:'whatsapp'|'teams'|'zalo',value:string){
   try{
     const url=new URL(value)
     if(url.protocol!=='https:' || url.username || url.password)return false
-    if(service==='zalo')return ['chat.zalo.me','id.zalo.me'].includes(url.hostname)
+    // jr is the HTTPS authentication handoff observed after mobile approval.
+    if(service==='zalo')return !url.port&&['chat.zalo.me','id.zalo.me','jr.zaloapp.com'].includes(url.hostname)
     return (service==='whatsapp'?/(^|\.)whatsapp\.com$/:/(^|\.)(microsoft\.com|microsoftonline\.com|live\.com|cloud\.microsoft)$/).test(url.hostname)
   }catch{return false}
 }
@@ -23,4 +24,7 @@ export function isSafeExternalWebUrl(value:string){
   }catch{return false}
 }
 
-export function isZaloStorageRequest(permission:string,top:string,origin:string,owned:boolean){return owned&&(permission==='storage-access'||permission==='top-level-storage-access')&&isWorkspaceUrl('zalo',top)&&isWorkspaceUrl('zalo',origin)}
+export function isZaloStorageRequest(permission:string,top:string,origin:string,owned:boolean){
+ const storageOrigin=(value:string)=>{try{const url=new URL(value);return isWorkspaceUrl('zalo',value)&&['chat.zalo.me','id.zalo.me'].includes(url.hostname)}catch{return false}}
+ return owned&&(permission==='storage-access'||permission==='top-level-storage-access')&&storageOrigin(top)&&storageOrigin(origin)
+}

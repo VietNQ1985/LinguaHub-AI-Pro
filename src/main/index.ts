@@ -11,7 +11,7 @@ import { ChatGPTConnection } from './auth/connection'
 import { maskSensitive } from '../shared/mask-sensitive'
 import { isZaloStorageRequest, isSafeExternalWebUrl, isWorkspaceUrl } from '../shared/navigation'
 import { diagnostic } from './diagnostics'
-import { zaloDiagnosticHost, zaloNetworkDiagnostic } from './zalo-diagnostic'
+import { zaloDiagnosticHost, zaloNetworkDiagnostic, zaloBlockedNavigationDiagnostic } from './zalo-diagnostic'
 import {restoreWindow,saveWindow} from './window-state'
 import { canShowWorkspaceNotification, isNotificationOrigin, type WorkspaceService } from './notification-policy'
 import { hasCloudConsentForTask } from './cloud-consent'
@@ -461,8 +461,8 @@ app.whenReady().then(async () => {
       child.webContents.on('will-navigate',(event,url)=>{if(!isWorkspaceUrl('zalo',url))event.preventDefault()})
       child.webContents.on('will-redirect',(event,url)=>{if(!isWorkspaceUrl('zalo',url))event.preventDefault()})
     })
-    view.webContents.on('will-navigate', (event,url)=>{if(!isWorkspaceUrl(service,url)){event.preventDefault();if(service==='zalo')void diagnostic('zalo-navigation-blocked',{host:zaloDiagnosticHost(url)})}})
-    view.webContents.on('will-redirect', (event,url)=>{if(!isWorkspaceUrl(service,url)){event.preventDefault();if(service==='zalo')void diagnostic('zalo-navigation-blocked',{host:zaloDiagnosticHost(url)})}})
+    view.webContents.on('will-navigate', (event,url)=>{if(!isWorkspaceUrl(service,event.url||url)){event.preventDefault();if(service==='zalo')void diagnostic('zalo-navigation-blocked',zaloBlockedNavigationDiagnostic(event.url||url))}})
+    view.webContents.on('will-redirect', (event,url)=>{if(!isWorkspaceUrl(service,event.url||url)){event.preventDefault();if(service==='zalo')void diagnostic('zalo-navigation-blocked',zaloBlockedNavigationDiagnostic(event.url||url))}})
     window.contentView.addChildView(view)
     layoutWorkspaceViews()
     const openingView = view
