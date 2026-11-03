@@ -12,6 +12,7 @@ import { maskSensitive } from '../shared/mask-sensitive'
 import { isZaloStorageRequest, isSafeExternalWebUrl, isWorkspaceUrl } from '../shared/navigation'
 import { diagnostic } from './diagnostics'
 import { zaloDiagnosticHost, zaloNetworkDiagnostic, zaloBlockedNavigationDiagnostic } from './zalo-diagnostic'
+import {ZaloPcCompanion} from './zalo-pc'
 import {restoreWindow,saveWindow} from './window-state'
 import { canShowWorkspaceNotification, isNotificationOrigin, type WorkspaceService } from './notification-policy'
 import { hasCloudConsentForTask } from './cloud-consent'
@@ -19,7 +20,7 @@ import { APP_USER_MODEL_ID, TOAST_ACTIVATOR_CLSID, startMenuShortcutPath, toastS
 import { FAST_REASONING_EFFORT, isGpt6Model } from '../shared/model-reasoning'
 let window: BrowserWindow
 let view: WebContentsView | undefined
-let currentWorkspaceService: ChatService | 'zalo' = 'whatsapp'
+let currentWorkspaceService: ChatService | 'zalo' | 'zalo-pc' = 'whatsapp'
 let chatReadAuthorized = false
 let workspacePanelWidth=360
 let workspacePanelCollapsed=false
@@ -105,7 +106,9 @@ app.whenReady().then(async () => {
   const windowState=restoreWindow()
   window = new BrowserWindow({ ...windowState, minWidth:1000,minHeight:600, webPreferences: { preload: join(import.meta.dirname, '../preload/index.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true } })
   if(windowState.maximized)window.maximize()
-  window.on('close',()=>saveWindow(window))
+  const zaloPc=new ZaloPcCompanion(window,()=>saveWindow(window))
+  let workspaceRequest=0
+  window.on('close',()=>{if(!zaloPc.active)saveWindow(window);void zaloPc.release()})
   const layoutWorkspaceViews=()=>{
     if(window.isDestroyed())return
     const [width,height]=window.getContentSize()
@@ -178,6 +181,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('workspace:reload',async event=>{
     trusted(event)
     stopMeeting()
+    if(currentWorkspaceService==='zalo-pc'){await zaloPc.arrange();return {title:'Zalo PC'}}
     if(!view || view.webContents.isDestroyed())throw new Error('Anh mở workspace trước.')
     const current=view
     const url=current.webContents.getURL()
@@ -394,10 +398,22 @@ app.whenReady().then(async () => {
     if (!Object.hasOwn(sites, service)) throw new Error('Invalid service')
     return shell.openExternal(sites[service])
   })
-  ipcMain.handle('workspace:open', (event, service: keyof typeof sites) => {
+  ipcMain.handle('zalo-pc:open',async event=>{
+    trusted(event)
+    ++workspaceRequest;stopMeeting();clearChatMutationDebounces();controlChatObservers(false)
+    chatReadAuthorized=false;backgroundCloudConsent=false
+    for(const child of views.values())child.setVisible(false)
+    view=undefined;currentWorkspaceService='zalo-pc'
+    return zaloPc.open()
+  })
+  ipcMain.handle('zalo-pc:release',async event=>{trusted(event);++workspaceRequest;await zaloPc.release();return true})
+  ipcMain.handle('workspace:open', async (event, service: keyof typeof sites) => {
     trusted(event)
     stopMeeting()
     if (!Object.hasOwn(sites, service)) throw new Error('Invalid service')
+    const request=++workspaceRequest
+    await zaloPc.release()
+    if(request!==workspaceRequest)return {title:''}
     currentWorkspaceService=service
     for (const existing of views.values()) { existing.webContents.send('chat:observer-control',false); existing.setVisible(false) }
     const existing = views.get(service)
@@ -471,8 +487,9 @@ app.whenReady().then(async () => {
       return { title: openingView.webContents.getTitle() }
     })
   })
-  ipcMain.handle('workspace:dashboard', event => {
+  ipcMain.handle('workspace:dashboard', async event => {
     trusted(event)
+    const request=++workspaceRequest;await zaloPc.release();if(request!==workspaceRequest)return false
     stopMeeting()
     chatReadAuthorized=false
     backgroundCloudConsent=false

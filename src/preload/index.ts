@@ -1,5 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 contextBridge.exposeInMainWorld('lingua', {
+  openZaloPc:()=>ipcRenderer.invoke('zalo-pc:open'),
+  releaseZaloPc:()=>ipcRenderer.invoke('zalo-pc:release'),
   onShortcut: (callback:(action:string)=>void) => {
     const listener=(_event:Electron.IpcRendererEvent,action:string)=>callback(action)
     ipcRenderer.on('app:shortcut',listener)
@@ -58,7 +60,7 @@ contextBridge.exposeInMainWorld('lingua', {
   testNotification: () => ipcRenderer.invoke('notifications:test'),
   getNotificationPreferences: () => ipcRenderer.invoke('notifications:get'),
   setNotificationPreference: (service: 'whatsapp' | 'teams', enabled: boolean) => ipcRenderer.invoke('notifications:set', service, enabled),
-  openWorkspace: (service: 'whatsapp' | 'teams') => ipcRenderer.invoke('workspace:open', service),
+  openWorkspace: (service: 'whatsapp' | 'teams' | 'zalo') => ipcRenderer.invoke('workspace:open', service),
   showDashboard: () => ipcRenderer.invoke('workspace:dashboard'),
-  openExternal: (service: 'whatsapp' | 'teams') => ipcRenderer.invoke('workspace:external', service),
+  openExternal: (service: 'whatsapp' | 'teams' | 'zalo') => ipcRenderer.invoke('workspace:external', service),
 })

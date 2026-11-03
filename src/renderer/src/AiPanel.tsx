@@ -1,4 +1,5 @@
 import { MeetingTranslation } from './MeetingTranslation'
+import {NativeZaloTranslation} from './NativeZaloTranslation'
 import { stopReplyPlayback } from './SpeechPlayback'
 import { useEffect, useRef, useState } from 'react'
 import { LiveTranslation } from './LiveTranslation'
@@ -234,11 +235,12 @@ export function AiPanel() {
     <div className="assistant-content">
       <div className="meeting-modes" role="group" aria-label="Chế độ dịch"><button type="button" aria-pressed={!meetingMode} onClick={()=>{invalidateReply();setMeetingMode(false)}}>Dịch tin nhắn</button><button type="button" disabled={service!=='teams'} aria-pressed={meetingMode} onClick={()=>{invalidateReply();setMeetingMode(true)}}>Dịch cuộc họp</button></div>
       {service==='zalo'&&<p className="translation-empty">Zalo Web có phiên đăng nhập riêng. Bản này hỗ trợ mở và dùng Zalo, chưa hỗ trợ tự đọc/dịch hội thoại Zalo.</p>}
+      {service==='zalo-pc'&&mode==='translate'&&<NativeZaloTranslation model={model}/>}
       {service==='teams'&&!meetingMode&&<p className="meeting-hint">Đang ở chế độ dịch tin nhắn. Để đọc phụ đề khi họp: chọn <button type="button" onClick={()=>{invalidateReply();setMeetingMode(true)}}>Dịch cuộc họp</button>, bật phụ đề English trong Teams rồi bấm Bắt đầu dịch.</p>}
       {meetingMode&&mode==='translate'&&<MeetingTranslation model={model}/>}
 
       {/* Keep the translation component mounted: changing tabs or hiding the panel must not stop visible chat reading. */}
-      <div style={{ display: mode === 'translate' && !meetingMode && service!=='zalo' ? 'block' : 'none' }} aria-hidden={mode !== 'translate'}>
+      <div style={{ display: mode === 'translate' && !meetingMode && service!=='zalo' && service!=='zalo-pc' ? 'block' : 'none' }} aria-hidden={mode !== 'translate'}>
         <LiveTranslation model={model} />
         <details className="reply-suggestions" onToggle={event=>{if(!event.currentTarget.open)invalidateReply()}}>
           <summary>Gợi ý trả lời</summary>
