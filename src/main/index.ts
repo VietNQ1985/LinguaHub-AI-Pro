@@ -11,6 +11,7 @@ import { ChatGPTConnection } from './auth/connection'
 import { maskSensitive } from '../shared/mask-sensitive'
 import { isZaloStorageRequest, isSafeExternalWebUrl, isWorkspaceUrl } from '../shared/navigation'
 import { diagnostic } from './diagnostics'
+import { zaloDiagnosticHost, zaloNetworkDiagnostic } from './zalo-diagnostic'
 import {restoreWindow,saveWindow} from './window-state'
 import { canShowWorkspaceNotification, isNotificationOrigin, type WorkspaceService } from './notification-policy'
 import { hasCloudConsentForTask } from './cloud-consent'
@@ -410,6 +411,14 @@ app.whenReady().then(async () => {
     view = new WebContentsView({ webPreferences: { preload: join(import.meta.dirname, '../preload/chat-view.cjs'), partition: `persist:linguahub-${service}`, nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false } })
     views.set(service, view)
     const serviceContents=view.webContents
+    if(service==='zalo'){
+      let remaining=100
+      serviceContents.session.webRequest.onErrorOccurred(details=>{
+        if(remaining>0&&zaloDiagnosticHost(details.url)!=='other'){remaining--;void diagnostic('zalo-network-failed',zaloNetworkDiagnostic(details.url,details.error))}
+      })
+      serviceContents.on('did-finish-load',()=>{void diagnostic('zalo-loaded',{host:zaloDiagnosticHost(serviceContents.getURL())})})
+      serviceContents.on('render-process-gone',()=>{void diagnostic('zalo-renderer-gone')})
+    }
     serviceContents.on('did-start-navigation',(_event,_url,_inPlace,isMainFrame)=>{if(isMainFrame&&meetingSession?.contents===serviceContents)stopMeeting()})
     const zaloAuthContents=new Set<Electron.WebContents>()
     let zaloStorageAllowed=false
@@ -452,8 +461,8 @@ app.whenReady().then(async () => {
       child.webContents.on('will-navigate',(event,url)=>{if(!isWorkspaceUrl('zalo',url))event.preventDefault()})
       child.webContents.on('will-redirect',(event,url)=>{if(!isWorkspaceUrl('zalo',url))event.preventDefault()})
     })
-    view.webContents.on('will-navigate', (event,url)=>{if(!isWorkspaceUrl(service,url))event.preventDefault()})
-    view.webContents.on('will-redirect', (event,url)=>{if(!isWorkspaceUrl(service,url))event.preventDefault()})
+    view.webContents.on('will-navigate', (event,url)=>{if(!isWorkspaceUrl(service,url)){event.preventDefault();if(service==='zalo')void diagnostic('zalo-navigation-blocked',{host:zaloDiagnosticHost(url)})}})
+    view.webContents.on('will-redirect', (event,url)=>{if(!isWorkspaceUrl(service,url)){event.preventDefault();if(service==='zalo')void diagnostic('zalo-navigation-blocked',{host:zaloDiagnosticHost(url)})}})
     window.contentView.addChildView(view)
     layoutWorkspaceViews()
     const openingView = view

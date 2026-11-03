@@ -9,3 +9,5 @@ Sau phản hồi quét QR hiện avatar rồi đứng: popup xác thực đượ
 Kiểm tra Windows: mở Zalo Web, đăng nhập trực tiếp trong app, chuyển WhatsApp/Teams rồi quay lại; khởi động lại để xác nhận phiên còn. Thử tải lại Zalo và đăng xuất bằng giao diện Zalo. Xóa dữ liệu LinguaHub phải xóa session Zalo cùng các workspace khác.
 
 Với Teams: ảnh phản hồi người dùng đang ở chế độ Dịch tin nhắn khi họp, chưa chứng minh adapter caption thất bại sau Start. Nút mode được làm rõ và có hướng dẫn: chọn Dịch cuộc họp, bật phụ đề English trong Teams rồi Bắt đầu dịch. Selector phụ đề vẫn cần kiểm chứng website thật.
+
+Người dùng xác nhận đã chấp thuận trên điện thoại nhưng trang vẫn chờ. Kiểm tra bản đã cài có popup/storage policy mới, chưa giải quyết lỗi. Bổ sung application.log: zalo-loaded, zalo-navigation-blocked, zalo-network-failed (tối đa 100 lỗi mạng mỗi workspace) và zalo-renderer-gone. Chỉ ghi hostname thuộc zalo.me/zdn.vn hoặc nhãn other, mã net::ERR_*, không ghi đường dẫn/query/header/body/cookie/token. Log dùng xoay vòng hiện có. Cần tái hiện trên bản chẩn đoán; chưa khẳng định nguyên nhân hoặc sửa xong đăng nhập.
