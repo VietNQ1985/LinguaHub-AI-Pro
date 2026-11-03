@@ -22,3 +22,5 @@ export function isSafeExternalWebUrl(value:string){
     return true
   }catch{return false}
 }
+
+export function isZaloStorageRequest(permission:string,top:string,origin:string,owned:boolean){return owned&&(permission==='storage-access'||permission==='top-level-storage-access')&&isWorkspaceUrl('zalo',top)&&isWorkspaceUrl('zalo',origin)}

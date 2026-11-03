@@ -9,7 +9,7 @@ import { buildVisibleChatReadScript, type ChatDomSnapshot, type ChatService } fr
 import { createLearningStore } from './database/store'
 import { ChatGPTConnection } from './auth/connection'
 import { maskSensitive } from '../shared/mask-sensitive'
-import { isSafeExternalWebUrl, isWorkspaceUrl } from '../shared/navigation'
+import { isZaloStorageRequest, isSafeExternalWebUrl, isWorkspaceUrl } from '../shared/navigation'
 import { diagnostic } from './diagnostics'
 import {restoreWindow,saveWindow} from './window-state'
 import { canShowWorkspaceNotification, isNotificationOrigin, type WorkspaceService } from './notification-policy'
@@ -411,9 +411,19 @@ app.whenReady().then(async () => {
     views.set(service, view)
     const serviceContents=view.webContents
     serviceContents.on('did-start-navigation',(_event,_url,_inPlace,isMainFrame)=>{if(isMainFrame&&meetingSession?.contents===serviceContents)stopMeeting()})
-    serviceContents.session.setPermissionCheckHandler((contents,permission,origin)=>service!=='zalo'&&canShowWorkspaceNotification(service,permission,origin,notificationPermissions[service],contents===null || contents===serviceContents))
+    const zaloAuthContents=new Set<Electron.WebContents>()
+    let zaloStorageAllowed=false
+    serviceContents.session.setPermissionCheckHandler((contents,permission,origin,details)=>{
+      if(service==='zalo')return zaloStorageAllowed&&isZaloStorageRequest(permission,serviceContents.getURL(),origin,contents===serviceContents||!!contents&&zaloAuthContents.has(contents))&&(!details.embeddingOrigin||isWorkspaceUrl('zalo',details.embeddingOrigin))
+      return canShowWorkspaceNotification(service,permission,origin,notificationPermissions[service],contents===null || contents===serviceContents)
+    })
     serviceContents.session.setPermissionRequestHandler(async(contents,permission,callback,details)=>{
-      if(service==='zalo'){callback(false);return}
+      if(service==='zalo'){
+        const origin=details.requestingUrl||''
+        if(!isZaloStorageRequest(permission,serviceContents.getURL(),origin,contents===serviceContents||!!contents&&zaloAuthContents.has(contents))){callback(false);return}
+        try{const answer=await dialog.showMessageBox(window,{type:'question',title:'Phiên đăng nhập Zalo',message:'Cho phép trang đăng nhập Zalo sử dụng phiên Zalo trong ứng dụng?',detail:'Chỉ áp dụng chat.zalo.me và id.zalo.me; không cấp microphone, camera hoặc dữ liệu của WhatsApp/Teams.',buttons:['Hủy','Cho phép'],defaultId:0,cancelId:0});zaloStorageAllowed=answer.response===1&&isZaloStorageRequest(permission,serviceContents.getURL(),origin,contents===serviceContents||!!contents&&zaloAuthContents.has(contents));callback(zaloStorageAllowed)}catch{callback(false)}
+        return
+      }
       const origin=details.requestingUrl || contents?.getURL() || ''
       if ((contents!==null && contents!==serviceContents) || permission!=='notifications' || !isNotificationOrigin(service,origin)){callback(false);return}
       if(notificationPermissions[service]){callback(true);return}
@@ -427,12 +437,20 @@ app.whenReady().then(async () => {
       .replace(/\slinguahub-ai-pro\/[^\s]+/gi, '')
     view.webContents.setUserAgent(chromiumUserAgent)
     view.webContents.setWindowOpenHandler(({ url }) => {
-      if(service==='zalo'&&isWorkspaceUrl('zalo',url)){void serviceContents.loadURL(url).catch(()=>{});return {action:'deny'}}
+      if(service==='zalo'&&isWorkspaceUrl('zalo',url))return {action:'allow',overrideBrowserWindowOptions:{parent:window,width:700,height:850,webPreferences:{session:serviceContents.session,nodeIntegration:false,contextIsolation:true,sandbox:true}}}
       if(isSafeExternalWebUrl(url)){
         const hostname=new URL(url).hostname
         void dialog.showMessageBox(window,{type:'question',title:'Mở liên kết ngoài LinguaHub?',message:`Mở ${hostname} trong trình duyệt mặc định?`,detail:'Kiểm tra tên miền trước khi mở liên kết từ cuộc trò chuyện.',buttons:['Hủy','Mở liên kết'],defaultId:0,cancelId:0}).then(result=>{if(result.response===1)return shell.openExternal(url)}).catch(()=>{})
       }
       return { action: 'deny' }
+    })
+    if(service==='zalo')serviceContents.on('did-create-window',child=>{
+      const childContents=child.webContents
+      zaloAuthContents.add(childContents)
+      childContents.once('destroyed',()=>zaloAuthContents.delete(childContents))
+      child.webContents.setWindowOpenHandler(()=>({action:'deny'}))
+      child.webContents.on('will-navigate',(event,url)=>{if(!isWorkspaceUrl('zalo',url))event.preventDefault()})
+      child.webContents.on('will-redirect',(event,url)=>{if(!isWorkspaceUrl('zalo',url))event.preventDefault()})
     })
     view.webContents.on('will-navigate', (event,url)=>{if(!isWorkspaceUrl(service,url))event.preventDefault()})
     view.webContents.on('will-redirect', (event,url)=>{if(!isWorkspaceUrl(service,url))event.preventDefault()})

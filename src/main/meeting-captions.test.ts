@@ -21,3 +21,14 @@ test('supports v2 caption containers and nested utterances without duplicating r
  expect(JSON.stringify(result.diagnostics)).not.toContain('Thank you')
  expect(JSON.stringify(result)).not.toContain('SECRET_CHAT');dom.window.close()
 })
+
+test('reads observed Teams sidebar markers with text-only captions and no item marker',()=>{
+ const dom=new JSDOM('<div data-tid="closed-caption-renderer-wrapper"><div data-tid="closed-caption-v2-window-wrapper"><div data-tid="closed-caption-v2-virtual-list-content"><div data-tid="closed-captions-v2-items-renderer"><div><span>Visible name without a reliable speaker marker</span><span data-tid="closed-caption-text">Sample caption.</span></div></div></div><button data-tid="captions-settings-redesign-feedback-thumb-up">Feedback</button></div></div>',{runScripts:'outside-only',pretendToBeVisual:true})
+ dom.window.HTMLElement.prototype.getBoundingClientRect=function(){return {width:100,height:20,top:1,bottom:21,left:1,right:101} as DOMRect}
+ const result=dom.window.eval(meetingCaptionScript()) as any
+ expect(result.segments).toHaveLength(1);expect(result.segments[0].text).toBe('Sample caption.');expect(result.segments[0].speaker).toBe('')
+ expect(JSON.stringify(result.segments)).not.toContain('Feedback');expect(JSON.stringify(result.segments)).not.toContain('Visible name')
+ const body=dom.window.document.querySelector('[data-tid="closed-caption-text"]')!;body.textContent='Corrected caption.'
+ const corrected=dom.window.eval(meetingCaptionScript()) as any;expect(corrected.segments[0].id).toBe(result.segments[0].id)
+ dom.window.close()
+})

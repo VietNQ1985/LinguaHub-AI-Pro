@@ -39,3 +39,5 @@ Test policy audio/video/deny/untrusted/navigation/screen frame/source/cancel; ca
 
 ## Phản hồi selector phụ đề
 Ảnh tiếp theo đã xác nhận đúng mode và có caption hiện, nhưng adapter không đọc được. Thêm các biến thể closed-caption-v2 container/window-wrapper/renderer/utterance/text-content. Chẩn đoán chỉ trả marker caption đang hiển thị và số iframe, không trả lời nói trong diagnostics/log. Các biến thể mới được test fixture, vẫn chưa đối chiếu DOM Teams thực tế. Nếu còn lỗi: Bắt đầu dịch, mở Chẩn đoán phụ đề và gửi marker/số iframe để sửa có bằng chứng.
+
+Ảnh chẩn đoán mới xác nhận closed-caption-renderer-wrapper, closed-captions-v2-items-renderer và closed-caption-text đang hiển thị. Adapter bổ sung đọc text-only khi không có marker item/utterance; fixture kiểm tra không lấy tên người/nút feedback và giữ ID khi sửa câu. Typecheck và 98 test/25 file đạt. Chưa xác minh lại dịch trong cuộc họp thật.
