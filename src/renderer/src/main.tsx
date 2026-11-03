@@ -5,15 +5,14 @@ import { AiPanel } from './AiPanel'
 import {unreadLabel} from '../../shared/workspace-unread'
 
 type WorkspaceService = 'whatsapp' | 'teams' | 'zalo'
-type UiService=WorkspaceService|'zalo-pc'
+type UiService=WorkspaceService
 
 declare global {
   interface Window {
     lingua: {
       getWorkspaceUnread():Promise<{whatsapp:number;teams:number;zalo:number}>
       onWorkspaceUnread(callback:(counts:{whatsapp:number;teams:number;zalo:number})=>void):()=>void
-      openZaloPc():Promise<{status:'ready'|'opened'|'cancelled';arranged:boolean}>
-      releaseZaloPc():Promise<boolean>
+      hideToTray():Promise<boolean>
       onShortcut(callback: (action: string) => void): () => void
       reloadWorkspace(): Promise<{ title: string }>
       setWorkspacePanelLayout(width: number, collapsed: boolean, persist?: boolean): void
@@ -21,8 +20,8 @@ declare global {
       showDashboard(): Promise<boolean>
       openExternal(service: WorkspaceService): Promise<void>
       testNotification(): Promise<boolean>
-      getNotificationPreferences(): Promise<{ whatsapp: boolean; teams: boolean }>
-      setNotificationPreference(service: WorkspaceService, enabled: boolean): Promise<{ whatsapp: boolean; teams: boolean }>
+      getNotificationPreferences(): Promise<{ whatsapp: boolean; teams: boolean; zalo:boolean }>
+      setNotificationPreference(service: WorkspaceService, enabled: boolean): Promise<{ whatsapp: boolean; teams: boolean; zalo:boolean }>
       authorizeVisibleChatRead(): Promise<boolean>
       hasVisibleChatReadAuthorization(): Promise<boolean>
       stopVisibleChatRead(): Promise<void>
@@ -77,8 +76,6 @@ function App() {
   },[])
   const badge=(service:WorkspaceService)=>unread[service]>0?<span className="workspace-unread" role="status" aria-label={`${unread[service]} chưa đọc theo thông báo của ứng dụng`} title="Số chưa đọc do trang cung cấp; có thể là số cuộc trò chuyện">{unreadLabel(unread[service])}</span>:null
   const [activeService, setActiveService] = React.useState<UiService>('whatsapp')
-  const [nativeArranged,setNativeArranged]=React.useState(false)
-  const [nativeBusy,setNativeBusy]=React.useState(false)
   const operation=React.useRef(0)
   const [fallbackService, setFallbackService] = React.useState<WorkspaceService | null>(null)
   const [panelWidth, setPanelWidth] = React.useState(400)
@@ -118,7 +115,6 @@ function App() {
 
   const open = React.useCallback(async (service: WorkspaceService) => {
     const current=++operation.current
-    setNativeArranged(false);setNativeBusy(false)
     setActiveService(service)
     setFallbackService(null)
     window.dispatchEvent(new Event('linguahub:workspace'))
@@ -135,26 +131,11 @@ function App() {
     }
   }, [])
 
-  const openPc=async()=>{
-    const current=++operation.current
-    setActiveService('zalo-pc');setFallbackService(null);setNativeBusy(true);setPanelCollapsed(false)
-    window.dispatchEvent(new Event('linguahub:workspace'))
-    window.dispatchEvent(new CustomEvent('linguahub:service',{detail:'zalo-pc'}))
-    setStatus('Đang mở Zalo PC…')
-    try{const result=await window.lingua.openZaloPc();if(current!==operation.current)return
-      setNativeArranged(result.arranged)
-      setStatus(result.status==='cancelled'?'Đã hủy mở Zalo PC':result.arranged?'Zalo PC và trợ lý đang chạy cạnh nhau':'Đã mở Zalo PC riêng; chưa sắp xếp được cửa sổ. Anh mở cửa sổ chính Zalo rồi bấm Sắp xếp cạnh nhau.')
-    }catch(failure){if(current===operation.current){setNativeArranged(false);setStatus(failure instanceof Error?failure.message:'Không mở được Zalo PC.')}}
-    finally{if(current===operation.current)setNativeBusy(false)}
-  }
-  const releasePc=async()=>{const current=++operation.current;setNativeBusy(true);try{await window.lingua.releaseZaloPc();if(current===operation.current){setNativeArranged(false);setStatus('Zalo PC tiếp tục chạy độc lập.')}}catch{if(current===operation.current)setStatus('Chưa khôi phục được vị trí cửa sổ.')}finally{if(current===operation.current)setNativeBusy(false)}}
-
   React.useEffect(() => {
     void open('whatsapp')
   }, [open])
 
   const reload = React.useCallback(async () => {
-    if(activeService==='zalo-pc')return
     window.dispatchEvent(new Event('linguahub:workspace'))
     setStatus('Đang tải lại trang…')
     try {
@@ -168,7 +149,7 @@ function App() {
   }, [activeService])
 
   React.useEffect(() => window.lingua.onShortcut(action => {
-    if (action === 'whatsapp' || action === 'teams') void open(action)
+    if (action === 'whatsapp' || action === 'teams' || action==='zalo') void open(action)
     else if (action === 'dashboard') void open('whatsapp')
     else if (action === 'reload') void reload()
   }), [open, reload])
@@ -183,32 +164,30 @@ function App() {
     }
   }
 
-  return <div className={nativeArranged?'app pc-companion':'app'} lang="vi">
+  return <div className="app" lang="vi">
     <header className="topbar">
       <div className="topbar-brand"><span className="brand-mark">VI</span><span>LinguaHub <small>AI</small></span></div>
-      {nativeArranged&&<button className="pc-return" onClick={()=>void open('whatsapp')}>← Trở về</button>}
       <nav className="workspace-tabs" aria-label="Chọn ứng dụng trò chuyện">
         <button type="button" className={activeService === 'whatsapp' ? 'workspace-tab active' : 'workspace-tab'} aria-current={activeService === 'whatsapp' ? 'page' : undefined} onClick={() => void open('whatsapp')}>WhatsApp{badge('whatsapp')}</button>
         <button type="button" className={activeService === 'teams' ? 'workspace-tab active' : 'workspace-tab'} aria-current={activeService === 'teams' ? 'page' : undefined} onClick={() => void open('teams')}>Microsoft Teams{badge('teams')}</button>
         <button type="button" className={activeService==='zalo'?'workspace-tab active':'workspace-tab'} aria-current={activeService==='zalo'?'page':undefined} onClick={()=>void open('zalo')}>Zalo Web{badge('zalo')}</button>
-        <button type="button" disabled={nativeBusy} className={activeService==='zalo-pc'?'workspace-tab active':'workspace-tab'} aria-current={activeService==='zalo-pc'?'page':undefined} onClick={()=>void openPc()}>Zalo PC</button>
       </nav>
       <div className="topbar-actions">
+        <button type="button" className="icon-button" title="Thu gọn xuống khay hệ thống" aria-label="Thu gọn xuống khay hệ thống" onClick={()=>void window.lingua.hideToTray().catch(()=>setStatus('Chưa thu gọn được xuống khay hệ thống.'))}>▁</button>
         <span className={online ? 'connection-status' : 'connection-status offline'} title={status}>{online ? status : 'Máy đang ngoại tuyến'}</span>
-        {activeService!=='zalo-pc'&&<button type="button" className="icon-button" title="Tải lại trang trò chuyện" aria-label="Tải lại trang" onClick={() => void reload()}>↻</button>}
+        <button type="button" className="icon-button" title="Tải lại trang trò chuyện" aria-label="Tải lại trang" onClick={() => void reload()}>↻</button>
         <button type="button" className="icon-button" title="Cài đặt" aria-label="Cài đặt" onClick={() => { if (panelCollapsed) setPanelCollapsed(false); window.dispatchEvent(new Event('linguahub:settings')) }}>⚙</button>
-        {activeService!=='zalo-pc'&&<button type="button" className="icon-button" title={panelCollapsed ? 'Mở bản dịch' : 'Thu gọn bản dịch'} aria-label={panelCollapsed ? 'Mở bản dịch' : 'Thu gọn bản dịch'} onClick={() => setPanelCollapsed(value => !value)}>{panelCollapsed ? '▤' : '◧'}</button>}
+        <button type="button" className="icon-button" title={panelCollapsed ? 'Mở bản dịch' : 'Thu gọn bản dịch'} aria-label={panelCollapsed ? 'Mở bản dịch' : 'Thu gọn bản dịch'} onClick={() => setPanelCollapsed(value => !value)}>{panelCollapsed ? '▤' : '◧'}</button>
       </div>
     </header>
     <div className="workspace-row">
       <main className="workspace" aria-label="Trang trò chuyện">
-        {activeService==='zalo-pc'?<div className="workspace-fallback"><h2>Zalo PC trên máy</h2><p role="status">{status}</p><p>Zalo PC là cửa sổ riêng, giữ nguyên tính năng của Zalo. LinguaHub không đọc màn hình hoặc nội dung Zalo PC.</p><button disabled={nativeBusy} onClick={()=>void openPc()}>{nativeBusy?'Đang mở…':'Mở / Sắp xếp cạnh nhau'}</button><button onClick={()=>void open('zalo')}>Dùng Zalo Web</button></div>:fallbackService ? <div className="workspace-fallback"><h2>Chưa mở được trang trò chuyện</h2><p>Trang này có thể không hỗ trợ chạy bên trong ứng dụng. Anh có thể mở bằng trình duyệt.</p><button onClick={() => void openFallback()}>Mở bằng trình duyệt</button></div> : <div className="workspace-placeholder">Đang mở trang trò chuyện…</div>}
+        {fallbackService ? <div className="workspace-fallback"><h2>Chưa mở được trang trò chuyện</h2><p>Trang này có thể không hỗ trợ chạy bên trong ứng dụng. Anh có thể mở bằng trình duyệt.</p><button onClick={() => void openFallback()}>Mở bằng trình duyệt</button></div> : <div className="workspace-placeholder">Đang mở trang trò chuyện…</div>}
       </main>
       {!panelCollapsed && <div className="panel-resizer" role="separator" aria-label="Kéo để điều chỉnh độ rộng bản dịch" aria-orientation="vertical" onPointerDown={event => { resizing.current = true; event.currentTarget.setPointerCapture(event.pointerId) }} onPointerMove={event => { if (resizing.current) updatePanelWidth(event.clientX, false) }} onPointerUp={event => { if (resizing.current) { resizing.current = false; updatePanelWidth(event.clientX, true) } }} onLostPointerCapture={() => { resizing.current = false }} />}
       <aside className={panelCollapsed ? 'panel panel-collapsed' : 'panel'} style={{width: panelCollapsed ? 56 : panelWidth}} aria-label="Trợ lý dịch tiếng Việt">
         {panelCollapsed && <button className="expand-panel" title="Mở bản dịch" aria-label="Mở bản dịch" onClick={() => setPanelCollapsed(false)}>›</button>}
         <div className={panelCollapsed ? 'panel-body panel-body-hidden' : 'panel-body'} aria-hidden={panelCollapsed}>
-          {activeService==='zalo-pc'&&<div className="pc-toolbar"><p role="status">{status}</p><button disabled={nativeBusy} onClick={()=>void openPc()}>Sắp xếp cạnh nhau</button><button disabled={nativeBusy} onClick={()=>void releasePc()}>Dùng Zalo riêng</button><button onClick={()=>void open('whatsapp')}>Trở về LinguaHub</button></div>}
           <AiPanel />
         </div>
       </aside>

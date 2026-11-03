@@ -1,13 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron'
 contextBridge.exposeInMainWorld('lingua', {
+  hideToTray:()=>ipcRenderer.invoke('window:tray'),
   getWorkspaceUnread:()=>ipcRenderer.invoke('workspace:unread'),
   onWorkspaceUnread:(callback:(counts:{whatsapp:number;teams:number;zalo:number})=>void)=>{
     const listener=(_event:Electron.IpcRendererEvent,counts:{whatsapp:number;teams:number;zalo:number})=>callback(counts)
     ipcRenderer.on('workspace:unread-changed',listener)
     return ()=>ipcRenderer.removeListener('workspace:unread-changed',listener)
   },
-  openZaloPc:()=>ipcRenderer.invoke('zalo-pc:open'),
-  releaseZaloPc:()=>ipcRenderer.invoke('zalo-pc:release'),
   onShortcut: (callback:(action:string)=>void) => {
     const listener=(_event:Electron.IpcRendererEvent,action:string)=>callback(action)
     ipcRenderer.on('app:shortcut',listener)
@@ -65,7 +64,7 @@ contextBridge.exposeInMainWorld('lingua', {
   cancelAi: (requestId: string) => ipcRenderer.invoke('ai:cancel', requestId),
   testNotification: () => ipcRenderer.invoke('notifications:test'),
   getNotificationPreferences: () => ipcRenderer.invoke('notifications:get'),
-  setNotificationPreference: (service: 'whatsapp' | 'teams', enabled: boolean) => ipcRenderer.invoke('notifications:set', service, enabled),
+  setNotificationPreference: (service: 'whatsapp' | 'teams' | 'zalo', enabled: boolean) => ipcRenderer.invoke('notifications:set', service, enabled),
   openWorkspace: (service: 'whatsapp' | 'teams' | 'zalo') => ipcRenderer.invoke('workspace:open', service),
   showDashboard: () => ipcRenderer.invoke('workspace:dashboard'),
   openExternal: (service: 'whatsapp' | 'teams' | 'zalo') => ipcRenderer.invoke('workspace:external', service),

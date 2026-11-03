@@ -15,8 +15,16 @@ type ScanTrigger = { source: 'event' | 'poll' | 'initial' | 'confirmation' | 'co
 type TimingSample = { detectedMs: number; confirmationMs: number; aiWaitMs: number; requestMs: number; firstResponseMs: number | null; firstPartialUiMs: number | null; firstVisibleMs: number | null; completionMs: number; aiProcessMs: number; uiUpdateMs: number; source: 'event' | 'poll' | 'initial'; messageCount: number; responseAt: number }
 type ChatSnapshot = { conversationId: string; text: string; messages: Array<{ text: string; side: 'left' | 'right' | 'center'; id?: string }> }
 
-export function LiveTranslation({ model }: { model: string }) {
+export function LiveTranslation({ model, active=true }: { model: string; active?:boolean }) {
   const [enabled, setEnabled] = useState(false)
+  const defaultAttempted=useRef(false)
+  useEffect(()=>{
+    if(!active||!model||defaultAttempted.current)return
+    defaultAttempted.current=true
+    let cancelled=false
+    void window.lingua.authorizeVisibleChatRead().then(allowed=>{if(!cancelled&&allowed)setEnabled(true)}).catch(()=>setStatus('Anh bấm Bật dịch để xác nhận quyền đọc tin nhắn.'))
+    return()=>{cancelled=true;defaultAttempted.current=false}
+  },[active,model])
   const [backgroundCloudAccess, setBackgroundCloudAccess] = useState<{ model: string; allowed: boolean } | null>(null)
   const [status, setStatus] = useState('Đang tắt đọc tin nhắn')
   const [messages, setMessages] = useState<VisibleMessage[]>([])
@@ -44,7 +52,7 @@ export function LiveTranslation({ model }: { model: string }) {
       if (backgroundCloudAccess) setBackgroundCloudAccess(null)
       return
     }
-    if (!enabled || backgroundCloudAccess?.model === model) return
+    if (!active || !enabled || backgroundCloudAccess?.model === model) return
     let cancelled = false
     setStatus('Chờ anh xác nhận gửi chữ tin nhắn hiển thị đến ChatGPT…')
     void window.lingua.allowBackgroundCloud().then(allowed => {
@@ -57,7 +65,7 @@ export function LiveTranslation({ model }: { model: string }) {
       setStatus(error instanceof Error ? error.message : 'Không xác nhận được quyền dịch ChatGPT.')
     })
     return () => { cancelled = true }
-  }, [enabled, model, backgroundCloudAccess?.model])
+  }, [active, enabled, model, backgroundCloudAccess?.model])
 
   const cancelBatch = () => {
     const ids = [...currentBatches.current.values()]
@@ -71,7 +79,7 @@ export function LiveTranslation({ model }: { model: string }) {
   }
 
   useEffect(() => {
-    if (!enabled) return
+    if (!active || !enabled) return
     let cancelled = false
     let scanning = false
     let rescanRequested = false
@@ -428,7 +436,7 @@ export function LiveTranslation({ model }: { model: string }) {
       failed.current.clear()
       failureMessages.current.clear()
     }
-  }, [enabled, activeModel, model])
+  }, [active, enabled, activeModel, model])
 
   useLayoutEffect(() => {
     const pending = pendingUiTimings.current.splice(0)

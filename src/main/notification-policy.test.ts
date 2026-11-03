@@ -2,6 +2,9 @@ import { expect, test } from 'vitest'
 import { canShowWorkspaceNotification, isNotificationOrigin } from './notification-policy'
 
 test('notifications are limited to the signed-in service origin', () => {
+  expect(isNotificationOrigin('zalo','https://chat.zalo.me')).toBe(true)
+  expect(isNotificationOrigin('zalo','https://id.zalo.me')).toBe(false)
+  expect(isNotificationOrigin('zalo','https://chat.zalo.me.attacker.test')).toBe(false)
   expect(isNotificationOrigin('whatsapp', 'https://web.whatsapp.com')).toBe(true)
   expect(isNotificationOrigin('teams', 'https://teams.microsoft.com')).toBe(true)
   expect(isNotificationOrigin('teams', 'https://teams.cloud.microsoft')).toBe(true)

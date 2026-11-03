@@ -1,6 +1,6 @@
 # Zalo Web trong LinguaHub
 
-Người dùng đã xác nhận vào được Zalo sau bản sửa đủ hai bước chuyển tiếp. Chế độ Zalo PC là tính năng riêng, xem [Zalo PC cùng LinguaHub](zalo-pc.md).
+Người dùng đã xác nhận vào được Zalo sau bản sửa đủ hai bước chuyển tiếp. Chế độ Zalo PC đã được gỡ theo yêu cầu; chỉ giữ Zalo Web.
 
 Tab Zalo Web mở https://chat.zalo.me/ với session persist:linguahub-zalo riêng. Đăng nhập do Zalo quản lý, chỉ cho điều hướng HTTPS tới chat.zalo.me, id.zalo.me, jr.zaloapp.com và jr.chat.zalo.me (các bước chuyển tiếp xác thực ghi nhận thực tế). Không cấp quyền media hoặc notifications cho Zalo trong bản này.
 

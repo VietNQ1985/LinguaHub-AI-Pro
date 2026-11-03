@@ -26,7 +26,8 @@ test('renderer retains streamed Vietnamese during bridge-triggered DOM scans wit
   const root=createRoot(container)
   try {
     await act(async()=>{root.render(createElement(LiveTranslation,{model:'local-test'}))})
-    await act(async()=>{(container.querySelector('button') as HTMLButtonElement).click()})
+    expect(container.textContent).toContain('Đang bật dịch tự động')
+    expect(dom.window.lingua.authorizeVisibleChatRead).toHaveBeenCalledTimes(1)
     await act(async()=>{delta('Xin chào')})
     expect(container.querySelector('.translation-vietnamese')?.textContent).toBe('Xin chào')
     await act(async()=>{change({observedAt:Date.now()});await new Promise(resolve=>setTimeout(resolve,30))})
@@ -35,4 +36,24 @@ test('renderer retains streamed Vietnamese during bridge-triggered DOM scans wit
     await act(async()=>{finish({result:{translation:'Xin chào bạn',explanation:''},timing:{requestMs:1,firstResponseMs:2,completionMs:3}})})
     expect(container.querySelector('.translation-vietnamese')?.textContent).toBe('Xin chào bạn')
   } finally {await act(async()=>{root.unmount()});dom.window.close()}
+})
+
+test('default translation respects denied or obsolete read permission',async()=>{
+ const dom=new JSDOM('<div id="root"></div>');vi.stubGlobal('window',dom.window);vi.stubGlobal('document',dom.window.document);vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT',true)
+ let answer:(allowed:boolean)=>void=()=>{}
+ const read=vi.fn(),runAi=vi.fn(),authorize=vi.fn(()=>new Promise<boolean>(resolve=>{answer=resolve}))
+ Object.assign(dom.window,{lingua:{authorizeVisibleChatRead:authorize,stopVisibleChatRead:async()=>{},readVisibleChat:read,runAi,cancelAi:async()=>true}})
+ const container=dom.window.document.querySelector('#root')!,root=createRoot(container)
+ try{
+  await act(async()=>root.render(createElement(LiveTranslation,{model:'local',active:false})))
+  expect(authorize).not.toHaveBeenCalled()
+  await act(async()=>root.render(createElement(LiveTranslation,{model:'local',active:true})))
+  await act(async()=>answer(false))
+  expect(read).not.toHaveBeenCalled();expect(runAi).not.toHaveBeenCalled()
+  await act(async()=>root.render(createElement(LiveTranslation,{model:'other',active:true})))
+  const obsolete=answer
+  await act(async()=>root.render(createElement(LiveTranslation,{model:'other',active:false})))
+  await act(async()=>obsolete(true))
+  expect(read).not.toHaveBeenCalled();expect(runAi).not.toHaveBeenCalled()
+ }finally{await act(async()=>root.unmount());dom.window.close()}
 })

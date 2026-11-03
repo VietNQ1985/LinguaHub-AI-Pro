@@ -32,6 +32,8 @@ Trang web có thể thay đổi cấu trúc DOM; tin nhắn đang tải lười 
 
 ## Kiểm tra
 
+Có nút thu gọn xuống system tray và thông báo riêng WhatsApp/Teams/Zalo Web theo số chưa đọc website cung cấp. Xem [cách dùng và giới hạn thông báo](docs/tray-notifications.md).
+
 - `npm run typecheck` — kiểm tra kiểu TypeScript.
 - `npm test` — kiểm thử logic AI, quyền consent, đọc DOM mô phỏng cho WhatsApp/Teams, OAuth, thông báo, cơ sở dữ liệu và học tập.
 - `npm run build` — tạo ứng dụng.
@@ -46,7 +48,6 @@ Kiểm thử DOM dùng trang HTML tổng hợp; nó không chứng minh bộ ch�
 
 ## Dịch cuộc họp Teams (thử nghiệm)
 
-Có chế độ **Zalo PC** mở ứng dụng Zalo thật và bố trí cạnh panel LinguaHub trên Windows. Không tự đọc chat Zalo PC; có ô dán chữ để dịch thủ công. Xem [cách dùng và giới hạn Zalo PC](docs/zalo-pc.md).
 
 Có thêm tab **Zalo Web** với phiên đăng nhập riêng; bản này chưa tự dịch Zalo. Xem [hướng dẫn Zalo và chọn đúng chế độ dịch Teams](docs/zalo-web.md).
 Nhánh meeting thêm quyền thiết bị Teams và mục **Dịch cuộc họp**. Anh tự bật phụ đề tiếng Anh trong Teams, bấm **Bắt đầu dịch** rồi xác nhận quyền riêng cho caption/cloud. Không thu âm hay tự lưu transcript. Tạm dừng/Dừng chỉ dừng dịch, không chủ động ngắt cuộc gọi.

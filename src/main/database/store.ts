@@ -37,7 +37,7 @@ export async function createLearningStore(directory: string, wasmPath: string) {
     ensureHealthy()
     const rows = db.select().from(appSettings).all()
     const values = Object.fromEntries(rows.map(row => [row.key, row.value]))
-    return { whatsapp: values['notifications.whatsapp'] === 'true', teams: values['notifications.teams'] === 'true' }
+    return { whatsapp: values['notifications.whatsapp'] === 'true', teams: values['notifications.teams'] === 'true', zalo: values['notifications.zalo'] === 'true' }
   }
   const getManualCloudConsent = () => {
     ensureHealthy()
@@ -126,7 +126,7 @@ export async function createLearningStore(directory: string, wasmPath: string) {
     },
     async setNotificationPreference(service: unknown, enabled: unknown) {
       ensureHealthy()
-      const data = z.object({ service: z.enum(['whatsapp','teams']), enabled: z.boolean() }).parse({service,enabled})
+      const data = z.object({ service: z.enum(['whatsapp','teams','zalo']), enabled: z.boolean() }).parse({service,enabled})
       const key = `notifications.${data.service}`
       db.insert(appSettings).values({key,value:String(data.enabled)}).onConflictDoUpdate({target:appSettings.key,set:{value:String(data.enabled)}}).run()
       await persist()
