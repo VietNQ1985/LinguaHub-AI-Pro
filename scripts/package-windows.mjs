@@ -10,7 +10,7 @@ const manifest=JSON.parse(await readFile(join(root,'package.json'),'utf8'))
 const outputDirectory=resolve(root,process.env.LINGUAHUB_PACKAGE_OUTPUT || manifest.build.directories.output)
 const configuration={...manifest.build,
   directories:{...manifest.build.directories,output:outputDirectory},
-  files:[{from:join(staging,'out'),to:'out',filter:['**/*']},'package.json'],
+  files:[{from:join(staging,'out'),to:'out',filter:['main/**/*','preload/**/*','renderer/**/*']},'package.json'],
   nsis:{...manifest.build.nsis,artifactName:'LinguaHub-AI-Pro-Setup.exe'},
 }
 const configPath=join(staging,'builder.json')

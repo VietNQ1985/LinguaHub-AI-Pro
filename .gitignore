@@ -16,3 +16,4 @@ coverage/
 .env.*
 !.env.example
 /release-final/
+/release-tray/

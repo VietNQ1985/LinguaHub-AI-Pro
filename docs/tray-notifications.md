@@ -10,3 +10,5 @@
 Kiểm thử tự động: cấu hình notification Zalo được lưu/reset; origin policy chặn login/lookalike; mỗi toast giữ đúng dịch vụ khi nhiều toast liên tiếp; mặc định dịch và streaming không tạo yêu cầu lặp. Chưa smoke test tray, click toast và nhận thông báo Zalo thật trên Windows cho bản này. Không coi test mock là xác nhận end-to-end.
 
 Validation: npm run typecheck đạt; toàn bộ 28 file/103 test đạt, sau đó thêm regression từ chối quyền/kết quả cấp quyền lỗi thời và chạy LiveTranslation.test.tsx 2/2 đạt. npm run build đạt. Đóng gói bản cuối ở release-final để tránh ghi đè job đóng gói trước đó. Chưa cài hoặc mở bản mới, không kiểm thử cloud thật hay thao tác thông báo Windows thật.
+
+Kiểm tra archive phát hiện helper cũ còn trong out/native từ build trước. Quy tắc đóng gói đã đổi sang chỉ lấy main/preload/renderer, loại output native cũ. Bản giao cuối dùng release-tray. Không phân phối các gói trung gian release/release-final.
