@@ -1,6 +1,6 @@
 # Zalo Web trong LinguaHub
 
-Tab Zalo Web mở https://chat.zalo.me/ với session persist:linguahub-zalo riêng. Đăng nhập do Zalo quản lý, chỉ cho điều hướng HTTPS tới chat.zalo.me, id.zalo.me và jr.zaloapp.com (bước chuyển tiếp xác thực ghi nhận thực tế). Không cấp quyền media hoặc notifications cho Zalo trong bản này.
+Tab Zalo Web mở https://chat.zalo.me/ với session persist:linguahub-zalo riêng. Đăng nhập do Zalo quản lý, chỉ cho điều hướng HTTPS tới chat.zalo.me, id.zalo.me, jr.zaloapp.com và jr.chat.zalo.me (các bước chuyển tiếp xác thực ghi nhận thực tế). Không cấp quyền media hoặc notifications cho Zalo trong bản này.
 
 Chưa có adapter đọc/dịch chat Zalo. Chưa kiểm chứng đăng nhập QR, lưu phiên và tương thích website thực tế. Không sửa ActiveSignal hoặc ứng dụng khác.
 
@@ -17,3 +17,5 @@ Lần tái hiện lúc 13:32 ngày 03/11/2026 (UTC+7): tải chat.zalo.me rồi 
 Nguyên nhân xác nhận bằng log tái hiện 13:36 ngày 03/11/2026 (UTC+7): sau xác nhận trên điện thoại, trang đăng nhập điều hướng HTTPS tới jr.zaloapp.com. Allowlist trước đó chặn đích này, gây ERR_ABORTED. Bổ sung chính xác hostname jr.zaloapp.com, không wildcard zaloapp.com; từ chối HTTP, credentials, port khác 443 và tên miền giả mạo. Không mở rộng storage-access sang jr; media/notifications vẫn từ chối. TLS kiểm tra đúng chứng chỉ *.zaloapp.com hợp lệ; chưa khẳng định đăng nhập end-to-end cho đến khi thử lại bản sửa. Typecheck, toàn bộ 26 file/100 test và build đạt.
 
 Bản sửa e57f1c5 đã được áp dụng cục bộ vào app.asar và mở lại LinguaHub; backup app.asar.before-zalo-diagnostic-20261103 vẫn giữ nguyên. Giao diện app sẵn sàng, tab Zalo tải lại id.zalo.me; đang chờ người dùng hoàn tất xác thực lại để xác nhận end-to-end. npm run dist thành công. Installer SHA-256: 4aa73479159ab5e94cb81976c03be731b8e779a8d9bcf700330435e76542c319.
+
+Lần thử tiếp theo lúc 13:43 ngày 03/11/2026 (UTC+7) xác nhận chuỗi chuyển tiếp còn qua jr.chat.zalo.me; allowlist trước đó tiếp tục chặn bước thứ hai, ERR_ABORTED xảy ra ở jr.zaloapp.com. Bổ sung chính xác jr.chat.zalo.me, vẫn HTTPS/không credentials/không port lạ; không mở rộng storage permissions. Regression test từ chối lookalike/subdomain khác/HTTP/credentials/port cho bước thứ hai. Typecheck, toàn bộ 26 file/101 test và build đạt. End-to-end chưa xác nhận lại.

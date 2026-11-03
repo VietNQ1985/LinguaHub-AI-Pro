@@ -3,7 +3,7 @@ export function isWorkspaceUrl(service:'whatsapp'|'teams'|'zalo',value:string){
     const url=new URL(value)
     if(url.protocol!=='https:' || url.username || url.password)return false
     // jr is the HTTPS authentication handoff observed after mobile approval.
-    if(service==='zalo')return !url.port&&['chat.zalo.me','id.zalo.me','jr.zaloapp.com'].includes(url.hostname)
+    if(service==='zalo')return !url.port&&['chat.zalo.me','id.zalo.me','jr.zaloapp.com','jr.chat.zalo.me'].includes(url.hostname)
     return (service==='whatsapp'?/(^|\.)whatsapp\.com$/:/(^|\.)(microsoft\.com|microsoftonline\.com|live\.com|cloud\.microsoft)$/).test(url.hostname)
   }catch{return false}
 }
