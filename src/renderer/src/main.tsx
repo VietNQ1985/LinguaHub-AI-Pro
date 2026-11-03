@@ -2,6 +2,7 @@ import React from 'react'
 import { createRoot } from 'react-dom/client'
 import './style.css'
 import { AiPanel } from './AiPanel'
+import {unreadLabel} from '../../shared/workspace-unread'
 
 type WorkspaceService = 'whatsapp' | 'teams' | 'zalo'
 type UiService=WorkspaceService|'zalo-pc'
@@ -9,6 +10,8 @@ type UiService=WorkspaceService|'zalo-pc'
 declare global {
   interface Window {
     lingua: {
+      getWorkspaceUnread():Promise<{whatsapp:number;teams:number;zalo:number}>
+      onWorkspaceUnread(callback:(counts:{whatsapp:number;teams:number;zalo:number})=>void):()=>void
       openZaloPc():Promise<{status:'ready'|'opened'|'cancelled';arranged:boolean}>
       releaseZaloPc():Promise<boolean>
       onShortcut(callback: (action: string) => void): () => void
@@ -65,6 +68,14 @@ declare global {
 }
 
 function App() {
+  const [unread,setUnread]=React.useState({whatsapp:0,teams:0,zalo:0})
+  React.useEffect(()=>{
+    let alive=true,updated=false
+    const stop=window.lingua.onWorkspaceUnread(counts=>{updated=true;if(alive)setUnread(counts)})
+    void window.lingua.getWorkspaceUnread().then(counts=>{if(alive&&!updated)setUnread(counts)}).catch(()=>{})
+    return()=>{alive=false;stop()}
+  },[])
+  const badge=(service:WorkspaceService)=>unread[service]>0?<span className="workspace-unread" role="status" aria-label={`${unread[service]} chưa đọc theo thông báo của ứng dụng`} title="Số chưa đọc do trang cung cấp; có thể là số cuộc trò chuyện">{unreadLabel(unread[service])}</span>:null
   const [activeService, setActiveService] = React.useState<UiService>('whatsapp')
   const [nativeArranged,setNativeArranged]=React.useState(false)
   const [nativeBusy,setNativeBusy]=React.useState(false)
@@ -177,9 +188,9 @@ function App() {
       <div className="topbar-brand"><span className="brand-mark">VI</span><span>LinguaHub <small>AI</small></span></div>
       {nativeArranged&&<button className="pc-return" onClick={()=>void open('whatsapp')}>← Trở về</button>}
       <nav className="workspace-tabs" aria-label="Chọn ứng dụng trò chuyện">
-        <button type="button" className={activeService === 'whatsapp' ? 'workspace-tab active' : 'workspace-tab'} aria-current={activeService === 'whatsapp' ? 'page' : undefined} onClick={() => void open('whatsapp')}>WhatsApp</button>
-        <button type="button" className={activeService === 'teams' ? 'workspace-tab active' : 'workspace-tab'} aria-current={activeService === 'teams' ? 'page' : undefined} onClick={() => void open('teams')}>Microsoft Teams</button>
-        <button type="button" className={activeService==='zalo'?'workspace-tab active':'workspace-tab'} aria-current={activeService==='zalo'?'page':undefined} onClick={()=>void open('zalo')}>Zalo Web</button>
+        <button type="button" className={activeService === 'whatsapp' ? 'workspace-tab active' : 'workspace-tab'} aria-current={activeService === 'whatsapp' ? 'page' : undefined} onClick={() => void open('whatsapp')}>WhatsApp{badge('whatsapp')}</button>
+        <button type="button" className={activeService === 'teams' ? 'workspace-tab active' : 'workspace-tab'} aria-current={activeService === 'teams' ? 'page' : undefined} onClick={() => void open('teams')}>Microsoft Teams{badge('teams')}</button>
+        <button type="button" className={activeService==='zalo'?'workspace-tab active':'workspace-tab'} aria-current={activeService==='zalo'?'page':undefined} onClick={()=>void open('zalo')}>Zalo Web{badge('zalo')}</button>
         <button type="button" disabled={nativeBusy} className={activeService==='zalo-pc'?'workspace-tab active':'workspace-tab'} aria-current={activeService==='zalo-pc'?'page':undefined} onClick={()=>void openPc()}>Zalo PC</button>
       </nav>
       <div className="topbar-actions">

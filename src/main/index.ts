@@ -13,6 +13,7 @@ import { isZaloStorageRequest, isSafeExternalWebUrl, isWorkspaceUrl } from '../s
 import { diagnostic } from './diagnostics'
 import { zaloDiagnosticHost, zaloNetworkDiagnostic, zaloBlockedNavigationDiagnostic } from './zalo-diagnostic'
 import {ZaloPcCompanion} from './zalo-pc'
+import {unreadFromTitle} from '../shared/workspace-unread'
 import {restoreWindow,saveWindow} from './window-state'
 import { canShowWorkspaceNotification, isNotificationOrigin, type WorkspaceService } from './notification-policy'
 import { hasCloudConsentForTask } from './cloud-consent'
@@ -147,6 +148,8 @@ app.whenReady().then(async () => {
     try{const result=await dialog.showMessageBox(window,{type:'question',message:'Cho phép microphone để luyện nói?',detail:'Thu âm cục bộ, tối đa 60 giây. Không gửi bản thu đến AI.',buttons:['Hủy','Cho phép'],defaultId:0,cancelId:0});microphoneAllowed=result.response===1;callback(microphoneAllowed)}catch{callback(false)}
   })
   const trusted = (event: Electron.IpcMainInvokeEvent) => { if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error('Untrusted sender') }
+  const unreadCounts={whatsapp:0,teams:0,zalo:0}
+  ipcMain.handle('workspace:unread',event=>{trusted(event);return {...unreadCounts}})
   let meetingSession:{token:string;contents:Electron.WebContents;model:string;cloud:boolean}|null=null
   const stopMeeting=()=>{meetingSession=null;for(const [id,controller] of aiRequests)if(id.startsWith('meeting-')){controller.abort();aiRequests.delete(id)}}
   ipcMain.handle('meeting:start',async(event,model:unknown)=>{
@@ -427,6 +430,15 @@ app.whenReady().then(async () => {
     view = new WebContentsView({ webPreferences: { preload: join(import.meta.dirname, '../preload/chat-view.cjs'), partition: `persist:linguahub-${service}`, nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false } })
     views.set(service, view)
     const serviceContents=view.webContents
+    const updateUnread=(title:string)=>{
+      if(!isWorkspaceUrl(service,serviceContents.getURL()))return
+      const count=unreadFromTitle(title)
+      if(unreadCounts[service]===count)return
+      unreadCounts[service]=count
+      if(!window.isDestroyed())window.webContents.send('workspace:unread-changed',{...unreadCounts})
+    }
+    serviceContents.on('page-title-updated',(_event,title)=>updateUnread(title))
+    serviceContents.on('did-finish-load',()=>updateUnread(serviceContents.getTitle()))
     if(service==='zalo'){
       let remaining=100
       serviceContents.session.webRequest.onErrorOccurred(details=>{
