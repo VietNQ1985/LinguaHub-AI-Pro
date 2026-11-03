@@ -32,3 +32,24 @@ npm ci đã chạy thành công; môi trường Node 24.14 báo engine warning v
 - npm test: 22 file, 85 test đạt.
 - Test renderer/playback mới: 3/3 đạt sau thay đổi cuối.
 - npm run build đạt. Chưa đóng gói/cài NSIS.
+
+## Review tiếp theo: P0/P1/P2
+- Gợi ý hoàn tất giữ conversationId cho đến khi bị xóa. Dùng sự kiện visible-chat-changed và quét dự phòng 1 giây CHỈ khi có yêu cầu/kết quả gắn chat; idle không quét. Đổi chat/xem không còn hợp lệ/lỗi đọc: xóa kết quả, hủy yêu cầu và dừng TTS.
+- Mọi bước đọc context/permission đều kiểm tra lại generation và request ID. Kiểm tra hội thoại ngay trước inference và trước khi hiện kết quả; finally chỉ xóa request ref thuộc chính yêu cầu đó. Không để finally của yêu cầu cũ xóa yêu cầu mới.
+- Cả chế độ chỉ nhập ý cũng cần quyền đọc cục bộ để gắn identity chat; chỉ văn bản nhập được gửi cloud trong chế độ đó. Nếu không có identity thì không tạo gợi ý.
+- TTS có callback dừng theo từng component. Unmount/đổi rate/accent chỉ dừng playback component sở hữu; đổi chat vẫn có chủ ý dừng playback gợi ý chung.
+- UI ghi rõ Low/Medium chỉ áp dụng ChatGPT nếu catalog công bố; Ollama dùng cấu hình model và checkbox bị vô hiệu hóa. Không thay đổi tự dịch.
+
+### STT cục bộ: đề xuất, chưa triển khai
+Không thấy whisper-cli trong PATH. Chưa có runtime/model được xác minh trong worktree, chưa có kiểm thử âm thanh tiếng Việt trên Windows; không tải binary/model hoặc dùng API trả phí.
+Đường triển khai tiếp theo: màn opt-in riêng nêu model đa ngôn ngữ, dung lượng thực và nguồn/checksum; chỉ tải sau đồng ý. Runtime whisper.cpp chạy process riêng không shell, nhận WAV mono có giới hạn dung lượng, bắt đầu sau quyền mic riêng. UI Start/Stop/Cancel và đồng hồ tối đa 60 giây. Hủy/timeout/unmount phải dừng recorder, kill process do app sở hữu, xóa WAV trong finally và dọn file mồ côi khi khởi động. Kết quả chỉ chèn vào ô để người dùng sửa rồi tự gửi; không tự gọi AI. Cần kiểm thử thật mic-denied, thiết bị mất, lỗi model, hủy, timeout và chất lượng tiếng Việt trước khi ghi hoàn tất.
+Hiện tại vẫn chỉ là hướng dẫn Windows Win+H, không phải microphone recorder trong app. Windows có chính sách xử lý riêng và có thể dùng dịch vụ trực tuyến. Chưa kiểm chứng thực tế Win+H/TTS Windows/NSIS trong lượt này.
+
+### Giới hạn identity
+Adapter baseline có thể tạo cùng conversationId cho hai chat trùng tên nếu website không cung cấp ID ổn định. Bộ giám sát không thể phân biệt hai ID giống hệt; không tuyên bố loại bỏ được giới hạn đó. Không sửa selector hay PR #1 trong lượt này.
+
+### Kết quả validation lượt sửa này
+- npm ci nguyên lệnh đã được khởi chạy nhưng dừng khi chờ mạng/audit quá lâu. Chạy lại npm ci --no-audit --prefer-offline thành công: 449 package, khoảng 3 phút; không thay lockfile. Vẫn có cảnh báo Node 24.14 thấp hơn yêu cầu >=24.15 của jsdom.
+- npm run typecheck đạt; full npm test: 22 file, 89 test đạt; npm run build đạt. Sau thay đổi hủy đồng bộ khi mở settings/đổi model, typecheck và 7 test renderer/TTS chạy lại đạt.
+- Test mới: gợi ý hoàn tất bị xóa khi đổi chat; idle không tiếp tục đọc; hủy trong initial/final context read không gọi inference; thẻ idle unmount không dừng thẻ đang đọc. Test cũ giữ unavailable voice, lỗi, rapid click, stop.
+- Chưa chạy app/giọng Windows thực tế, microphone/Win+H thật, AI live hoặc NSIS; không có số đo tăng tốc thực tế cho lượt sửa này.

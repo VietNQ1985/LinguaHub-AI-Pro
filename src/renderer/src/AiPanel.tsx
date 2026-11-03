@@ -55,11 +55,14 @@ export function AiPanel() {
   const [masking, setMasking] = useState(true)
   const requestGeneration = useRef(0)
   const activeReply = useRef<string | null>(null)
+  const replyConversation = useRef<string | null>(null)
+  const [boundConversation,setBoundConversation]=useState<string|null>(null)
   const intentRef = useRef<HTMLTextAreaElement>(null)
   const [voiceHelp,setVoiceHelp]=useState(false)
   const [replyFast,setReplyFast]=useState(false)
   const invalidateReply=()=>{
     requestGeneration.current++
+    replyConversation.current=null;setBoundConversation(null)
     if(activeReply.current)void window.lingua.cancelAi(activeReply.current).catch(()=>{})
     activeReply.current=null
     setBusy(false);setOutput(null);stopReplyPlayback()
@@ -71,6 +74,24 @@ export function AiPanel() {
     return ()=>{requestGeneration.current++;window.removeEventListener('linguahub:workspace',reset);window.removeEventListener('linguahub:dashboard',reset);if(activeReply.current)void window.lingua.cancelAi(activeReply.current).catch(()=>{});stopReplyPlayback()}
   },[])
   useEffect(()=>{invalidateReply()},[model,mode])
+  useEffect(()=>{
+    if(!boundConversation || (!busy && output===null))return
+    let disposed=false,checking=false
+    const generation=requestGeneration.current
+    const check=async()=>{
+      if(disposed||checking)return
+      checking=true
+      try{
+        const next=await window.lingua.readVisibleChat()
+        if(!disposed&&generation===requestGeneration.current&&replyConversation.current===boundConversation&&next?.conversationId!==boundConversation)invalidateReply()
+      }catch{if(!disposed&&generation===requestGeneration.current)invalidateReply()}
+      finally{checking=false}
+    }
+    const unsubscribe=window.lingua.onVisibleChatChanged(()=>void check())
+    const timer=setInterval(()=>void check(),1000)
+    return ()=>{disposed=true;unsubscribe();clearInterval(timer)}
+  },[boundConversation,busy,output])
+
 
   useEffect(() => {
     let active = true
@@ -89,12 +110,13 @@ export function AiPanel() {
   }, [])
 
   useEffect(() => {
-    const showSettings = () => setMode('settings')
+    const showSettings = () => {invalidateReply();setMode('settings')}
     window.addEventListener('linguahub:settings', showSettings)
     return () => window.removeEventListener('linguahub:settings', showSettings)
   }, [])
 
   const saveModel = (value: string) => {
+    invalidateReply()
     setModel(value)
     setError('')
     void window.lingua.setPreferences({ theme, model: value }).catch(() => setError('Không lưu được mô hình AI.'))
@@ -155,75 +177,47 @@ export function AiPanel() {
     }
   }
 
-  const sendReplyRequest = async () => {
-    if (!input.trim() || !model || busy) return
-    const generation = ++requestGeneration.current
-    setBusy(true)
-    setError('')
-    setOutput(null)
-    let contextTimer:ReturnType<typeof setInterval>|undefined
-    try {
-      const initial=await window.lingua.hasVisibleChatReadAuthorization()?await window.lingua.readVisibleChat():null
-      if(initial){
-        let checking=false
-        contextTimer=setInterval(()=>{if(checking)return;checking=true;void window.lingua.readVisibleChat().then(next=>{if(generation===requestGeneration.current&&next?.conversationId!==initial.conversationId)invalidateReply()}).catch(()=>{if(generation===requestGeneration.current)invalidateReply()}).finally(()=>{checking=false})},350)
+  const generateReply = async (contextual:boolean) => {
+    if(!model||busy||(!contextual&&!input.trim()))return
+    invalidateReply()
+    const generation=requestGeneration.current
+    const requestId=crypto.randomUUID()
+    activeReply.current=requestId
+    const valid=()=>generation===requestGeneration.current&&activeReply.current===requestId
+    setBusy(true);setError('')
+    try{
+      let authorized=await window.lingua.hasVisibleChatReadAuthorization()
+      if(!valid())return
+      if(!authorized){authorized=await window.lingua.authorizeVisibleChatRead();if(!valid())return}
+      if(!authorized){setError('Anh chưa cho phép đọc chữ chat đang hiển thị.');return}
+      const snapshot=authorized?await window.lingua.readVisibleChat():null
+      if(!valid())return
+      if(!snapshot?.conversationId||(contextual&&!snapshot.messages.length))throw new Error('Chưa xác định được cuộc trò chuyện đang hiển thị.')
+      if(snapshot?.conversationId){replyConversation.current=snapshot.conversationId;setBoundConversation(snapshot.conversationId)}
+      const matches=async()=>{
+        if(!valid())return false
+        if(!snapshot)return true
+        const current=await window.lingua.readVisibleChat()
+        if(!valid())return false
+        if(current?.conversationId!==snapshot.conversationId){invalidateReply();return false}
+        return true
       }
-      if (model.startsWith('chatgpt:') && !(await window.lingua.allowCloud())) {
-        if (generation === requestGeneration.current) setError('Anh chưa cho phép xử lý nội dung bằng ChatGPT.')
-        return
+      if(model.startsWith('chatgpt:')){
+        const allowed=await (contextual?window.lingua.allowBackgroundCloud():window.lingua.allowCloud())
+        if(!valid())return
+        if(!allowed){setError('Anh chưa cho phép xử lý nội dung bằng ChatGPT.');return}
       }
-      if(generation!==requestGeneration.current)return
-      const requestId=crypto.randomUUID();activeReply.current=requestId
-      const result = await window.lingua.runAi('reply', input, model, requestId, {replyFast})
-      const latest=initial?await window.lingua.readVisibleChat():null
-      if (generation === requestGeneration.current && (!initial||latest?.conversationId===initial.conversationId)) setOutput(result)
-    } catch (failure) {
-      if (generation === requestGeneration.current) setError(failure instanceof Error ? failure.message : 'Chưa tạo được gợi ý. Anh thử lại.')
-    } finally {
-      if(contextTimer!==undefined)clearInterval(contextTimer)
-      if (generation === requestGeneration.current) setBusy(false)
-    }
+      if(!await matches()||!valid())return
+      const payload=contextual?JSON.stringify({messages:recentChatContext(snapshot!.messages),intent:input.trim()||undefined}):input
+      const result=await window.lingua.runAi(contextual?'replyFromChat':'reply',payload,model,requestId,{replyFast:model.startsWith('chatgpt:')&&replyFast})
+      if(!valid())return
+      if(!await matches()||!valid())return
+      setOutput(result)
+    }catch(failure){if(valid())setError(failure instanceof Error?failure.message:'Chưa tạo được gợi ý. Anh thử lại.')}
+    finally{if(activeReply.current===requestId)activeReply.current=null;if(generation===requestGeneration.current)setBusy(false)}
   }
-
-  const sendContextualReplyRequest = async () => {
-    if (!model || busy) return
-    const generation = ++requestGeneration.current
-    setBusy(true)
-    setError('')
-    setOutput(null)
-    try {
-      if (!(await window.lingua.hasVisibleChatReadAuthorization()) && !(await window.lingua.authorizeVisibleChatRead())) {
-        if (generation === requestGeneration.current) setError('Anh chưa cho phép đọc chữ chat đang hiển thị.')
-        return
-      }
-      const snapshot = await window.lingua.readVisibleChat()
-      const messages = snapshot ? recentChatContext(snapshot.messages) : []
-      if (!messages.length) throw new Error('Chưa thấy tin nhắn trong vùng chat đang hiển thị. Anh mở WhatsApp hoặc Teams rồi thử lại.')
-      if (model.startsWith('chatgpt:') && !(await window.lingua.allowBackgroundCloud())) {
-        if (generation === requestGeneration.current) setError('Anh chưa cho phép gửi chữ chat đang hiển thị đến ChatGPT.')
-        return
-      }
-      if(generation!==requestGeneration.current)return
-      const current=await window.lingua.readVisibleChat()
-      if(!snapshot || !current || current.conversationId!==snapshot.conversationId)return
-      const requestId = crypto.randomUUID();activeReply.current=requestId
-      let checking=false
-      const timer=setInterval(()=>{
-        if(checking)return
-        checking=true
-        void window.lingua.readVisibleChat().then(next=>{if(generation===requestGeneration.current&&(!next||next.conversationId!==snapshot.conversationId))invalidateReply()}).catch(()=>{if(generation===requestGeneration.current)invalidateReply()}).finally(()=>{checking=false})
-      },350)
-      try {
-        const result = await window.lingua.runAi('replyFromChat', JSON.stringify({ messages, intent: input.trim() || undefined }), model, requestId, {replyFast})
-        const latest=await window.lingua.readVisibleChat()
-        if(generation===requestGeneration.current&&latest?.conversationId===snapshot.conversationId)setOutput(result)
-      } finally {clearInterval(timer)}
-    } catch (failure) {
-      if (generation === requestGeneration.current) setError(failure instanceof Error ? failure.message : 'Chưa tạo được gợi ý từ cuộc trò chuyện. Anh thử lại.')
-    } finally {
-      if (generation === requestGeneration.current) setBusy(false)
-    }
-  }
+  const sendReplyRequest=()=>generateReply(false)
+  const sendContextualReplyRequest=()=>generateReply(true)
 
   return <div className="assistant-shell">
     <div className="assistant-heading">
@@ -245,7 +239,8 @@ export function AiPanel() {
             <textarea ref={intentRef} id="reply-input" value={input} maxLength={2000} onChange={event => { setInput(event.target.value); invalidateReply() }} placeholder="Ví dụ: Tôi sẽ kiểm tra lại và phản hồi vào sáng mai." />
             <button type="button" onClick={()=>{intentRef.current?.focus();setVoiceHelp(true)}}>🎙 Nhập giọng nói Windows (Win+H)</button>
             {voiceHelp && <p role="status" className="helper-text">Đặt ngôn ngữ bàn phím là Tiếng Việt, nhấn Win+H rồi nói. Windows quản lý quyền microphone và có thể dùng xử lý trực tuyến theo cài đặt của anh. Dừng hoặc đóng thanh Win+H để kết thúc. LinguaHub chưa tích hợp STT cục bộ, không thu hay lưu âm thanh. Anh sửa chữ trong ô rồi tự bấm tạo gợi ý.</p>}
-            <label className="checkbox-label"><input type="checkbox" checked={replyFast} onChange={event=>{invalidateReply();setReplyFast(event.target.checked)}} /> Trả lời nhanh (Low/Medium nếu model hỗ trợ)</label>
+            <label className="checkbox-label"><input type="checkbox" checked={model.startsWith('chatgpt:')&&replyFast} disabled={!model.startsWith('chatgpt:')} onChange={event=>{invalidateReply();setReplyFast(event.target.checked)}} /> Trả lời nhanh ChatGPT (Low/Medium được model công bố)</label>
+            {!model.startsWith('chatgpt:') && <p className="helper-text">Ollama dùng cấu hình của model cục bộ; tùy chọn Low/Medium này không áp dụng.</p>}
             {!model && <p className="helper-text">Anh hãy chọn dịch vụ AI trong phần Cài đặt.</p>}
             <button type="button" className="primary-button" disabled={!model || busy} onClick={() => void sendContextualReplyRequest()}>{busy ? 'Đang đọc chat và tạo gợi ý…' : 'Đọc chat & gợi ý trả lời'}</button>
             {input.trim() && <button type="button" className="secondary-button reply-manual-button" disabled={!model || busy} onClick={() => void sendReplyRequest()}>Chỉ dùng ý tôi nhập</button>}

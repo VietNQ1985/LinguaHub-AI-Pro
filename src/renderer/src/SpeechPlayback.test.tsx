@@ -34,3 +34,18 @@ test('no installed English voice disables playback honestly',async()=>{
  const container=dom.window.document.querySelector('#root')!;const root=createRoot(container)
  try{await act(async()=>root.render(createElement(SpeechPlayback,{text:'Hello'})));expect(container.querySelector('button')?.disabled).toBe(true);expect(container.textContent).toContain('Chưa tìm thấy giọng tiếng Anh')}finally{await act(async()=>root.unmount());dom.window.close()}
 })
+
+test('unmounting an idle card does not cancel playback owned by another card',async()=>{
+ const dom=new JSDOM('<div id="a"></div><div id="b"></div>');vi.stubGlobal('window',dom.window);vi.stubGlobal('document',dom.window.document);vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT',true)
+ vi.stubGlobal('SpeechSynthesisUtterance',class{constructor(public text:string){}})
+ const synth={getVoices:()=>[{lang:'en-US'}],addEventListener:vi.fn(),removeEventListener:vi.fn(),cancel:vi.fn(),speak:vi.fn(value=>value.onstart())};Object.assign(dom.window,{speechSynthesis:synth})
+ const a=createRoot(dom.window.document.querySelector('#a')!),b=createRoot(dom.window.document.querySelector('#b')!)
+ try{
+ await act(async()=>{a.render(createElement(SpeechPlayback,{text:'A'}));b.render(createElement(SpeechPlayback,{text:'B'}))})
+ await act(async()=>{(dom.window.document.querySelector('#b button') as HTMLButtonElement).click()})
+ const before=synth.cancel.mock.calls.length
+ await act(async()=>a.unmount())
+ expect(synth.cancel).toHaveBeenCalledTimes(before)
+ expect(dom.window.document.querySelector('#b')?.textContent).toContain('Đang đọc')
+ }finally{await act(async()=>b.unmount());dom.window.close()}
+})
