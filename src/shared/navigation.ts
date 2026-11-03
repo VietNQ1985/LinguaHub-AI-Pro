@@ -1,7 +1,8 @@
-export function isWorkspaceUrl(service:'whatsapp'|'teams',value:string){
+export function isWorkspaceUrl(service:'whatsapp'|'teams'|'zalo',value:string){
   try{
     const url=new URL(value)
     if(url.protocol!=='https:' || url.username || url.password)return false
+    if(service==='zalo')return ['chat.zalo.me','id.zalo.me'].includes(url.hostname)
     return (service==='whatsapp'?/(^|\.)whatsapp\.com$/:/(^|\.)(microsoft\.com|microsoftonline\.com|live\.com|cloud\.microsoft)$/).test(url.hostname)
   }catch{return false}
 }

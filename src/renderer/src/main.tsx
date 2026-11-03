@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './style.css'
 import { AiPanel } from './AiPanel'
 
-type WorkspaceService = 'whatsapp' | 'teams'
+type WorkspaceService = 'whatsapp' | 'teams' | 'zalo'
 
 declare global {
   interface Window {
@@ -103,7 +103,8 @@ function App() {
     setActiveService(service)
     setFallbackService(null)
     window.dispatchEvent(new Event('linguahub:workspace'))
-    setStatus(service === 'whatsapp' ? 'Đang mở WhatsApp…' : 'Đang mở Teams…')
+    window.dispatchEvent(new CustomEvent('linguahub:service',{detail:service}))
+    setStatus(service === 'whatsapp' ? 'Đang mở WhatsApp…' : service==='zalo'?'Đang mở Zalo Web…':'Đang mở Teams…')
     try {
       await window.lingua.openWorkspace(service)
       setStatus('Đã mở trang trò chuyện')
@@ -152,6 +153,7 @@ function App() {
       <nav className="workspace-tabs" aria-label="Chọn ứng dụng trò chuyện">
         <button type="button" className={activeService === 'whatsapp' ? 'workspace-tab active' : 'workspace-tab'} aria-current={activeService === 'whatsapp' ? 'page' : undefined} onClick={() => void open('whatsapp')}>WhatsApp</button>
         <button type="button" className={activeService === 'teams' ? 'workspace-tab active' : 'workspace-tab'} aria-current={activeService === 'teams' ? 'page' : undefined} onClick={() => void open('teams')}>Microsoft Teams</button>
+        <button type="button" className={activeService==='zalo'?'workspace-tab active':'workspace-tab'} aria-current={activeService==='zalo'?'page':undefined} onClick={()=>void open('zalo')}>Zalo Web</button>
       </nav>
       <div className="topbar-actions">
         <span className={online ? 'connection-status' : 'connection-status offline'} title={status}>{online ? status : 'Máy đang ngoại tuyến'}</span>

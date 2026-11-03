@@ -41,6 +41,8 @@ function modelLabel(value: string) {
 }
 
 export function AiPanel() {
+  const [service,setService]=useState('whatsapp')
+  useEffect(()=>{const changed=(event:Event)=>{const value=(event as CustomEvent<string>).detail;setService(value);setMeetingMode(false);invalidateReply()};window.addEventListener('linguahub:service',changed);return()=>window.removeEventListener('linguahub:service',changed)},[])
   const [meetingMode,setMeetingMode]=useState(false)
   const [mode, setMode] = useState<PanelMode>('translate')
   const [model, setModel] = useState('')
@@ -230,11 +232,13 @@ export function AiPanel() {
     </div>
 
     <div className="assistant-content">
-      <div className="meeting-modes"><button type="button" aria-pressed={!meetingMode} onClick={()=>{invalidateReply();setMeetingMode(false)}}>Dịch tin nhắn</button><button type="button" aria-pressed={meetingMode} onClick={()=>{invalidateReply();setMeetingMode(true)}}>Dịch cuộc họp</button></div>
+      <div className="meeting-modes" role="group" aria-label="Chế độ dịch"><button type="button" aria-pressed={!meetingMode} onClick={()=>{invalidateReply();setMeetingMode(false)}}>Dịch tin nhắn</button><button type="button" disabled={service!=='teams'} aria-pressed={meetingMode} onClick={()=>{invalidateReply();setMeetingMode(true)}}>Dịch cuộc họp</button></div>
+      {service==='zalo'&&<p className="translation-empty">Zalo Web có phiên đăng nhập riêng. Bản này hỗ trợ mở và dùng Zalo, chưa hỗ trợ tự đọc/dịch hội thoại Zalo.</p>}
+      {service==='teams'&&!meetingMode&&<p className="meeting-hint">Đang ở chế độ dịch tin nhắn. Để đọc phụ đề khi họp: chọn <button type="button" onClick={()=>{invalidateReply();setMeetingMode(true)}}>Dịch cuộc họp</button>, bật phụ đề English trong Teams rồi bấm Bắt đầu dịch.</p>}
       {meetingMode&&mode==='translate'&&<MeetingTranslation model={model}/>}
 
       {/* Keep the translation component mounted: changing tabs or hiding the panel must not stop visible chat reading. */}
-      <div style={{ display: mode === 'translate' && !meetingMode ? 'block' : 'none' }} aria-hidden={mode !== 'translate'}>
+      <div style={{ display: mode === 'translate' && !meetingMode && service!=='zalo' ? 'block' : 'none' }} aria-hidden={mode !== 'translate'}>
         <LiveTranslation model={model} />
         <details className="reply-suggestions" onToggle={event=>{if(!event.currentTarget.open)invalidateReply()}}>
           <summary>Gợi ý trả lời</summary>

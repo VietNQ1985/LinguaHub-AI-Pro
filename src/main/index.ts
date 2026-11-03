@@ -18,14 +18,14 @@ import { APP_USER_MODEL_ID, TOAST_ACTIVATOR_CLSID, startMenuShortcutPath, toastS
 import { FAST_REASONING_EFFORT, isGpt6Model } from '../shared/model-reasoning'
 let window: BrowserWindow
 let view: WebContentsView | undefined
-let currentWorkspaceService: ChatService = 'whatsapp'
+let currentWorkspaceService: ChatService | 'zalo' = 'whatsapp'
 let chatReadAuthorized = false
 let workspacePanelWidth=360
 let workspacePanelCollapsed=false
 const views = new Map<string, WebContentsView>()
 app.setAppUserModelId(APP_USER_MODEL_ID)
 if(process.platform==='win32')app.setToastActivatorCLSID(TOAST_ACTIVATOR_CLSID)
-const sites = { whatsapp: 'https://web.whatsapp.com', teams: 'https://teams.microsoft.com' }
+const sites = { whatsapp: 'https://web.whatsapp.com', teams: 'https://teams.microsoft.com', zalo: 'https://chat.zalo.me/' }
 const ownsInstance=app.requestSingleInstanceLock()
 if(!ownsInstance)app.quit()
 app.on('second-instance',()=>{if(window && !window.isDestroyed()){window.restore();window.show();window.focus()}})
@@ -78,7 +78,7 @@ app.whenReady().then(async () => {
   const chatMutationDebounces = new Map<ChatService, {timer:ReturnType<typeof setTimeout>;contents:Electron.WebContents;observedAt:number}>()
   const clearChatMutationDebounces=()=>{for(const entry of chatMutationDebounces.values())clearTimeout(entry.timer);chatMutationDebounces.clear()}
   const controlChatObservers=(enabled:boolean,only?:ChatService)=>{
-    for(const [service,child] of views.entries())if((!only||service===only)&&!child.webContents.isDestroyed())child.webContents.send('chat:observer-control',enabled)
+    for(const [service,child] of views.entries())if(service!=='zalo'&&(!only||service===only)&&!child.webContents.isDestroyed())child.webContents.send('chat:observer-control',enabled)
   }
   const grantNotificationPermission = async (service: WorkspaceService) => {
     if (notificationPermissions[service]) return true
@@ -181,9 +181,9 @@ app.whenReady().then(async () => {
     const current=view
     const url=current.webContents.getURL()
     const service=[...views.entries()].find(([,entry])=>entry===current)?.[0]
-    if(service!=='whatsapp' && service!=='teams')throw new Error('Workspace không hợp lệ')
+    if(service!=='whatsapp' && service!=='teams' && service!=='zalo')throw new Error('Workspace không hợp lệ')
     await current.webContents.loadURL(isWorkspaceUrl(service,url)?url:sites[service])
-    if(chatReadAuthorized&&view===current)current.webContents.send('chat:observer-control',true)
+    if(service!=='zalo'&&chatReadAuthorized&&view===current)current.webContents.send('chat:observer-control',true)
     return {title:current.webContents.getTitle()}
   })
   ipcMain.handle('privacy:masking',(event,enabled:unknown)=>{trusted(event);if(typeof enabled!=='boolean')throw new Error('Cài đặt không hợp lệ');masking=enabled})
@@ -403,7 +403,7 @@ app.whenReady().then(async () => {
     if (existing) {
       view = existing
       view.setVisible(true)
-      if(chatReadAuthorized)view.webContents.send('chat:observer-control',true)
+      if(service!=='zalo'&&chatReadAuthorized)view.webContents.send('chat:observer-control',true)
       layoutWorkspaceViews()
       return { title: view.webContents.getTitle() }
     }
@@ -411,8 +411,9 @@ app.whenReady().then(async () => {
     views.set(service, view)
     const serviceContents=view.webContents
     serviceContents.on('did-start-navigation',(_event,_url,_inPlace,isMainFrame)=>{if(isMainFrame&&meetingSession?.contents===serviceContents)stopMeeting()})
-    serviceContents.session.setPermissionCheckHandler((contents,permission,origin)=>canShowWorkspaceNotification(service,permission,origin,notificationPermissions[service],contents===null || contents===serviceContents))
+    serviceContents.session.setPermissionCheckHandler((contents,permission,origin)=>service!=='zalo'&&canShowWorkspaceNotification(service,permission,origin,notificationPermissions[service],contents===null || contents===serviceContents))
     serviceContents.session.setPermissionRequestHandler(async(contents,permission,callback,details)=>{
+      if(service==='zalo'){callback(false);return}
       const origin=details.requestingUrl || contents?.getURL() || ''
       if ((contents!==null && contents!==serviceContents) || permission!=='notifications' || !isNotificationOrigin(service,origin)){callback(false);return}
       if(notificationPermissions[service]){callback(true);return}
@@ -426,6 +427,7 @@ app.whenReady().then(async () => {
       .replace(/\slinguahub-ai-pro\/[^\s]+/gi, '')
     view.webContents.setUserAgent(chromiumUserAgent)
     view.webContents.setWindowOpenHandler(({ url }) => {
+      if(service==='zalo'&&isWorkspaceUrl('zalo',url)){void serviceContents.loadURL(url).catch(()=>{});return {action:'deny'}}
       if(isSafeExternalWebUrl(url)){
         const hostname=new URL(url).hostname
         void dialog.showMessageBox(window,{type:'question',title:'Mở liên kết ngoài LinguaHub?',message:`Mở ${hostname} trong trình duyệt mặc định?`,detail:'Kiểm tra tên miền trước khi mở liên kết từ cuộc trò chuyện.',buttons:['Hủy','Mở liên kết'],defaultId:0,cancelId:0}).then(result=>{if(result.response===1)return shell.openExternal(url)}).catch(()=>{})
@@ -438,7 +440,7 @@ app.whenReady().then(async () => {
     layoutWorkspaceViews()
     const openingView = view
     return openingView.webContents.loadURL(sites[service]).then(() => {
-      if(chatReadAuthorized&&view===openingView)openingView.webContents.send('chat:observer-control',true)
+      if(service!=='zalo'&&chatReadAuthorized&&view===openingView)openingView.webContents.send('chat:observer-control',true)
       return { title: openingView.webContents.getTitle() }
     })
   })

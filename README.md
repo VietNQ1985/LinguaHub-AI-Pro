@@ -45,6 +45,8 @@ Kiểm thử DOM dùng trang HTML tổng hợp; nó không chứng minh bộ ch�
 
 
 ## Dịch cuộc họp Teams (thử nghiệm)
+
+Có thêm tab **Zalo Web** với phiên đăng nhập riêng; bản này chưa tự dịch Zalo. Xem [hướng dẫn Zalo và chọn đúng chế độ dịch Teams](docs/zalo-web.md).
 Nhánh meeting thêm quyền thiết bị Teams và mục **Dịch cuộc họp**. Anh tự bật phụ đề tiếng Anh trong Teams, bấm **Bắt đầu dịch** rồi xác nhận quyền riêng cho caption/cloud. Không thu âm hay tự lưu transcript. Tạm dừng/Dừng chỉ dừng dịch, không chủ động ngắt cuộc gọi.
 
 **Chưa xác minh trong cuộc họp Teams thật.** Nếu không tìm được phụ đề thì app báo rõ và dừng; chưa có audio/STT fallback. Xem [hướng dẫn và giới hạn Windows](docs/teams-meeting.md).
