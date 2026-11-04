@@ -160,9 +160,9 @@ h2, h3, h4 { color: var(--text); }
 .suggestion-actions { display:flex; flex-wrap:wrap; gap:7px; margin-top:12px; }
 .suggestion-actions button { flex:1 1 145px; }
 .reply-composer {
-  position: sticky; bottom: 0; z-index: 1; margin: 8px 12px 14px; padding: 15px;
+  margin: 8px 12px 14px; padding: 15px;
   border: 1px solid var(--border); border-radius: 14px; background: var(--surface);
-  box-shadow: 0 -8px 24px rgb(15 23 42 / 8%); min-width: 0;
+  box-shadow: 0 2px 8px rgb(15 23 42 / 6%); min-width: 0;
 }
 .composer-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:12px; }
 .composer-heading h3 { margin:0; font-size:16px; }
