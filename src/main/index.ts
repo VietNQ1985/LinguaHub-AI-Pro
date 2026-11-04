@@ -2,7 +2,7 @@ import { meetingCaptionScript } from './meeting-captions'
 import { trustedTeamsOrigin, installTeamsMeetingPermissions } from './teams-meeting-permissions'
 import { app, BrowserWindow, WebContentsView, ipcMain, shell, Notification, dialog, clipboard, Tray, Menu, nativeImage } from 'electron'
 import { randomUUID, createHash } from 'node:crypto'
-import { existsSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { listLocalModels, reasoningEffortForTask, runLocalAi, type AiTask } from './ai'
 import { buildVisibleChatReadScript, type ChatDomSnapshot, type ChatService } from './chat-dom-reader'
@@ -29,12 +29,18 @@ let workspacePanelCollapsed=false
 const views = new Map<string, WebContentsView>()
 app.setAppUserModelId(APP_USER_MODEL_ID)
 let quitting=false
+const startupSmoke=process.env.LINGUAHUB_STARTUP_SMOKE==='1'
+const markStartupSmoke=(state:'app-ready'|'renderer-ready'|'renderer-failed'|'app-startup-failed')=>{
+  const marker=process.env.LINGUAHUB_SMOKE_MARKER
+  if(!startupSmoke||!marker)return
+  try{writeFileSync(marker,`${state}\n`,'utf8')}catch{}
+}
 let tray:Tray|undefined
 let notificationWorkspaceActivator:((service:WorkspaceService)=>void)|undefined
 let pendingNotificationWorkspace:WorkspaceService|undefined
 app.on('before-quit',()=>{quitting=true})
 const sites = { whatsapp: 'https://web.whatsapp.com', teams: 'https://teams.microsoft.com', zalo: 'https://chat.zalo.me/' }
-const ownsInstance=app.requestSingleInstanceLock()
+const ownsInstance=startupSmoke||app.requestSingleInstanceLock()
 if(!ownsInstance)app.quit()
 app.on('second-instance',(_event,commandLine)=>{
   const service=commandLine.map(argument=>workspaceFromNotificationActivation('click',argument)).find((value):value is WorkspaceService=>value!==null)
@@ -74,6 +80,7 @@ function ensureWindowsToastShortcut(){
 }
 app.whenReady().then(async () => {
   if(!ownsInstance)return
+  markStartupSmoke('app-ready')
   if(process.platform==='win32')Notification.handleActivation(details=>{
     const service=workspaceFromNotificationActivation(details.type,details.arguments)
     if(!service)return
@@ -120,7 +127,7 @@ app.whenReady().then(async () => {
     try { return await prompt } finally { notificationPrompts.delete(service) }
   }
   const windowState=restoreWindow()
-  window = new BrowserWindow({ ...windowState, minWidth:1000,minHeight:600, webPreferences: { preload: join(import.meta.dirname, '../preload/index.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true } })
+  window = new BrowserWindow({ ...windowState, show:!startupSmoke,minWidth:1000,minHeight:600, webPreferences: { preload: join(import.meta.dirname, '../preload/index.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true } })
   if(windowState.maximized)window.maximize()
   let workspaceRequest=0
   Menu.setApplicationMenu(Menu.buildFromTemplate([{label:'Ứng dụng',submenu:[{label:'Thu gọn xuống khay hệ thống',click:()=>{if(tray)window.hide()}},{label:'Thoát hoàn toàn',click:()=>app.quit()}]},{label:'Chỉnh sửa',submenu:[{role:'undo'},{role:'redo'},{type:'separator'},{role:'cut'},{role:'copy'},{role:'paste'},{role:'selectAll'}]},{label:'Hiển thị',submenu:[{role:'reload'},{role:'toggleDevTools'},{role:'resetZoom'},{role:'zoomIn'},{role:'zoomOut'}]}]))
@@ -588,9 +595,19 @@ app.whenReady().then(async () => {
   window.webContents.on('render-process-gone',()=>{void diagnostic('renderer-gone')})
   void diagnostic('application-ready')
   window.webContents.on('will-navigate',event=>event.preventDefault())
-  if (process.env.ELECTRON_RENDERER_URL) void window.loadURL(process.env.ELECTRON_RENDERER_URL)
-  else void window.loadFile(join(import.meta.dirname, '../renderer/index.html'))
+  let startupSmokeFinished=false
+  const finishStartupSmoke=(success:boolean)=>{
+    if(!startupSmoke||startupSmokeFinished)return
+    startupSmokeFinished=true
+    markStartupSmoke(success?'renderer-ready':'renderer-failed')
+    void diagnostic(success?'startup-smoke-renderer-ready':'startup-smoke-load-failed').then(()=>success?app.quit():app.exit(1))
+  }
+  if(startupSmoke)window.webContents.once('did-finish-load',()=>finishStartupSmoke(true))
+  window.webContents.on('did-fail-load',(_event,_errorCode,_description,_validatedURL,isMainFrame)=>{if(startupSmoke&&isMainFrame)finishStartupSmoke(false)})
+  const load=process.env.ELECTRON_RENDERER_URL?window.loadURL(process.env.ELECTRON_RENDERER_URL):window.loadFile(join(import.meta.dirname, '../renderer/index.html'))
+  void load.catch(()=>finishStartupSmoke(false))
 }).catch(() => {
+  markStartupSmoke('app-startup-failed')
   void diagnostic('startup-failed')
   dialog.showErrorBox('LinguaHub chưa khởi động được', 'Không mở được dữ liệu hoặc thành phần ứng dụng. Anh giữ nguyên thư mục dữ liệu để có thể khôi phục, rồi mở lại app. Chưa có dữ liệu nào bị tự động xóa.')
   app.quit()

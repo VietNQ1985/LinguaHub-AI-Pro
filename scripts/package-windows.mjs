@@ -1,31 +1,44 @@
-import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises'
-import { resolve, join } from 'node:path'
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { isAbsolute, relative, resolve, sep, join } from 'node:path'
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
+
 const root=resolve(import.meta.dirname,'..')
-const staging=await mkdtemp(join(root,'.package-'))
-// Each packaging job owns its snapshot; later builds cannot replace these files.
-await cp(join(root,'out'),join(staging,'out'),{recursive:true})
 const manifest=JSON.parse(await readFile(join(root,'package.json'),'utf8'))
-const outputDirectory=resolve(root,process.env.LINGUAHUB_PACKAGE_OUTPUT || manifest.build.directories.output)
-const configuration={...manifest.build,
-  directories:{...manifest.build.directories,output:outputDirectory},
-  files:[{from:join(staging,'out'),to:'out',filter:['main/**/*','preload/**/*','renderer/**/*']},'package.json'],
-  nsis:{...manifest.build.nsis,artifactName:'LinguaHub-AI-Pro-Setup.exe'},
+const outputDirectory=resolve(root,process.env.LINGUAHUB_PACKAGE_OUTPUT||manifest.build.directories.output)
+const outputRelative=relative(root,outputDirectory)
+if(!outputRelative||outputRelative==='..'||outputRelative.startsWith(`..${sep}`)||isAbsolute(outputRelative))throw new Error('Thư mục đóng gói phải nằm bên trong thư mục dự án.')
+const staging=await mkdtemp(join(root,'.package-'))
+const setupName=`LinguaHub-AI-Pro-Setup-${manifest.version}.exe`
+const portableName=`LinguaHub-AI-Pro-Portable-${manifest.version}.exe`
+const targets=[['nsis',setupName],['portable',portableName]]
+
+function runBuilder(target,configPath){
+  return new Promise((resolvePromise,reject)=>{
+    const child=spawn(process.execPath,[join(root,'node_modules/electron-builder/cli.js'),'--win',target,'--x64','--config',configPath],{cwd:root,stdio:'inherit',windowsHide:true})
+    child.once('error',reject)
+    child.once('exit',code=>code===0?resolvePromise():reject(new Error(`electron-builder ${target} завершився з кодом ${code??'невідомо'}`)))
+  })
 }
-const configPath=join(staging,'builder.json')
-await writeFile(configPath,JSON.stringify(configuration,null,2))
-const child=spawn(process.execPath,[join(root,'node_modules/electron-builder/cli.js'),'--win','nsis','--config',configPath],{cwd:root,stdio:'inherit',windowsHide:true})
-child.on('error',error=>{console.error(error.message);process.exitCode=1})
-child.on('exit',async code=>{
-  process.exitCode=code ?? 1
-  if(code===0){
-    try{
-      const filename=join(outputDirectory,'LinguaHub-AI-Pro-Setup.exe')
-      const bytes=await readFile(filename)
-      const hash=createHash('sha256').update(bytes).digest('hex')
-      await writeFile(`${filename}.sha256`,`${hash}  LinguaHub-AI-Pro-Setup.exe\n`)
-      console.log(`Installer SHA-256: ${hash}`)
-    }catch(error){console.error(error.message);process.exitCode=1}
+
+try{
+  await cp(join(root,'out'),join(staging,'out'),{recursive:true})
+  const configuration={...manifest.build,
+    directories:{...manifest.build.directories,output:outputDirectory},
+    files:[{from:join(staging,'out'),to:'out',filter:['main/**/*','preload/**/*','renderer/**/*']},'package.json'],
   }
-})
+  const configPath=join(staging,'builder.json')
+  await writeFile(configPath,JSON.stringify(configuration,null,2))
+  await mkdir(outputDirectory,{recursive:true})
+  for(const [,name] of targets)await rm(join(outputDirectory,name),{force:true})
+  for(const [target] of targets)await runBuilder(target,configPath)
+
+  for(const [,name] of targets){
+    const path=join(outputDirectory,name)
+    const bytes=await readFile(path)
+    const hash=createHash('sha256').update(bytes).digest('hex')
+    console.log(`${name} SHA-256: ${hash}`)
+  }
+}finally{
+  await rm(staging,{recursive:true,force:true})
+}

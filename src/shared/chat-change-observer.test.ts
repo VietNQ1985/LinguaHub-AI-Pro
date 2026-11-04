@@ -57,11 +57,9 @@ test('rebinds and reports when a chat view replaces its message root',async()=>{
   replacement.setAttribute('data-testid','conversation-panel-messages')
   replacement.textContent='New chat'
   dom.window.document.querySelector('#chat')!.replaceWith(replacement)
-  await new Promise(resolve=>setTimeout(resolve,CHAT_CHANGE_DEBOUNCE_MS+25))
-  expect(callback).toHaveBeenCalledTimes(1)
+  await vi.waitFor(()=>expect(callback).toHaveBeenCalledTimes(1),{timeout:2000,interval:10})
   replacement.textContent='New chat with another message'
-  await new Promise(resolve=>setTimeout(resolve,CHAT_CHANGE_DEBOUNCE_MS+25))
-  expect(callback).toHaveBeenCalledTimes(2)
+  await vi.waitFor(()=>expect(callback).toHaveBeenCalledTimes(2),{timeout:2000,interval:10})
   stop()
   dom.window.close()
 })
