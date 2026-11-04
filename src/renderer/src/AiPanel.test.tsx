@@ -107,6 +107,10 @@ test('contextual composer translates once, preserves English edits and copies on
   await act(async()=>{translate.click();await new Promise(resolve=>setTimeout(resolve,10))})
   expect(copy.disabled).toBe(false)
   expect(runAi).toHaveBeenCalledTimes(2)
+  const tone=container.querySelector('#reply-tone') as HTMLSelectElement
+  await act(async()=>{tone.value='friendly';tone.dispatchEvent(new dom.window.Event('change',{bubbles:true}))})
+  expect(copy.disabled).toBe(true)
+  expect(container.textContent).toContain('giọng điệu đã đổi')
  }finally{await act(async()=>root.unmount());dom.window.close();vi.unstubAllGlobals()}
 })
 
