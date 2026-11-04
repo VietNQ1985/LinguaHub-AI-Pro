@@ -15,7 +15,8 @@ import { zaloDiagnosticHost, zaloNetworkDiagnostic, zaloBlockedNavigationDiagnos
 import {unreadFromTitle} from '../shared/workspace-unread'
 import type {UnreadCounts,UnreadValue} from '../shared/workspace-unread'
 import {restoreWindow,saveWindow} from './window-state'
-import { canShowWorkspaceNotification, isNotificationOrigin, type WorkspaceService } from './notification-policy'
+import type { WorkspaceService } from './notification-policy'
+import { genericWorkspaceNotificationOptions, routeWorkspaceNotificationClick, unreadChangeNeedsNotification, workspaceFromNotificationActivation } from './workspace-notifications'
 import { hasCloudConsentForTask } from './cloud-consent'
 import { APP_USER_MODEL_ID, startMenuShortcutPath, toastShortcutDetails } from './windows-notifications'
 import { FAST_REASONING_EFFORT, isGpt6Model } from '../shared/model-reasoning'
@@ -29,11 +30,17 @@ const views = new Map<string, WebContentsView>()
 app.setAppUserModelId(APP_USER_MODEL_ID)
 let quitting=false
 let tray:Tray|undefined
+let notificationWorkspaceActivator:((service:WorkspaceService)=>void)|undefined
+let pendingNotificationWorkspace:WorkspaceService|undefined
 app.on('before-quit',()=>{quitting=true})
 const sites = { whatsapp: 'https://web.whatsapp.com', teams: 'https://teams.microsoft.com', zalo: 'https://chat.zalo.me/' }
 const ownsInstance=app.requestSingleInstanceLock()
 if(!ownsInstance)app.quit()
-app.on('second-instance',()=>{if(window && !window.isDestroyed()){window.restore();window.show();window.focus()}})
+app.on('second-instance',(_event,commandLine)=>{
+  const service=commandLine.map(argument=>workspaceFromNotificationActivation('click',argument)).find((value):value is WorkspaceService=>value!==null)
+  if(service){if(notificationWorkspaceActivator)notificationWorkspaceActivator(service);else pendingNotificationWorkspace=service;return}
+  if(window && !window.isDestroyed()){window.restore();window.show();window.focus()}
+})
 app.on('web-contents-created',(_event,contents)=>{
   contents.on('before-input-event',(event,input)=>{
     if(!input.control || input.type!=='keyDown' || input.alt || input.meta)return
@@ -67,6 +74,12 @@ function ensureWindowsToastShortcut(){
 }
 app.whenReady().then(async () => {
   if(!ownsInstance)return
+  if(process.platform==='win32')Notification.handleActivation(details=>{
+    const service=workspaceFromNotificationActivation(details.type,details.arguments)
+    if(!service)return
+    if(notificationWorkspaceActivator)notificationWorkspaceActivator(service)
+    else pendingNotificationWorkspace=service
+  })
   ensureWindowsToastShortcut()
   let cloudConsent = false
   let backgroundCloudConsent = false
@@ -93,8 +106,8 @@ app.whenReady().then(async () => {
       const answer = await dialog.showMessageBox(window, {
         type: 'question',
         title: 'Cho phép thông báo Windows',
-        message: `Cho phép ${service === 'whatsapp' ? 'WhatsApp' : service==='zalo'?'Zalo Web':'Microsoft Teams'} hiện thông báo trên Windows?`,
-        detail: 'Thông báo có thể hiển thị tên người gửi và nội dung tin nhắn. Anh có thể tắt quyền này trong Cài đặt.',
+        message: `Cho phép ${service === 'whatsapp' ? 'WhatsApp' : service==='zalo'?'Zalo Web':'Microsoft Teams'} hiện thông báo chung trên Windows?`,
+        detail: 'LinguaHub chỉ hiện “Có thông báo mới.”, không hiện tên người gửi hay nội dung. Thông báo chứa nội dung do trang web tạo sẽ bị chặn.',
         buttons: ['Hủy', 'Cho phép'], defaultId: 0, cancelId: 0,
       })
       if (answer.response !== 1) return false
@@ -152,6 +165,7 @@ app.whenReady().then(async () => {
   const trusted = (event: Electron.IpcMainInvokeEvent) => { if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error('Untrusted sender') }
   const activateWorkspace=(service:keyof typeof sites)=>{
     if(window.isDestroyed())return
+    if(currentWorkspaceService===service&&window.isVisible()&&!window.isMinimized()&&view?.webContents===views.get(service)?.webContents){window.focus();return}
     currentWorkspaceService=service
     for(const [key,child] of views){child.setVisible(key===service);child.webContents.send('chat:observer-control',key===service&&service!=='zalo'&&chatReadAuthorized)}
     view=views.get(service);stopMeeting();layoutWorkspaceViews()
@@ -168,17 +182,51 @@ app.whenReady().then(async () => {
   ipcMain.handle('window:tray',event=>{trusted(event);if(!tray)throw new Error('Chưa tạo được biểu tượng khay hệ thống.');window.hide();return true})
   const unreadCounts:UnreadCounts={whatsapp:0,teams:0,zalo:0}
   const domUnread=new Map<string,UnreadValue>()
+  const notificationArmed=new Set<WorkspaceService>()
+  const notificationWarmupTimers=new Map<WorkspaceService,ReturnType<typeof setTimeout>>()
+  const scheduleNotificationWarmup=(service:WorkspaceService,contents:Electron.WebContents)=>{
+    const previousTimer=notificationWarmupTimers.get(service)
+    if(previousTimer)clearTimeout(previousTimer)
+    notificationArmed.delete(service)
+    const timer=setTimeout(()=>{
+      notificationWarmupTimers.delete(service)
+      if(contents.isDestroyed()||!isWorkspaceUrl(service,contents.getURL()))return
+      const baseline=domUnread.get(service)??unreadFromTitle(contents.getTitle())
+      const previous=unreadCounts[service]
+      unreadCounts[service]=baseline
+      notificationArmed.add(service)
+      if(previous!==baseline){void diagnostic('workspace-unread',{host:service,code:`baseline:${baseline}`});if(!window.isDestroyed())window.webContents.send('workspace:unread-changed',{...unreadCounts})}
+    },2000)
+    notificationWarmupTimers.set(service,timer)
+  }
+  const updateUnreadCount=(service:WorkspaceService,next:UnreadValue,source:'dom'|'title')=>{
+    const previous=unreadCounts[service]
+    const armed=notificationArmed.has(service)
+    if(previous!==next){
+      unreadCounts[service]=next
+      void diagnostic('workspace-unread',{host:service,code:`${source}:${next}`})
+      if(!window.isDestroyed())window.webContents.send('workspace:unread-changed',{...unreadCounts})
+      if(!armed){const contents=views.get(service)?.webContents;if(contents&&!contents.isDestroyed())scheduleNotificationWarmup(service,contents)}
+    }
+    if(notificationPermissions[service]&&Notification.isSupported()&&unreadChangeNeedsNotification(previous,next,armed)){
+      const notification=new Notification(genericWorkspaceNotificationOptions(service))
+      routeWorkspaceNotificationClick(notification,service,activateWorkspace)
+      notification.show()
+    }
+  }
   ipcMain.on('workspace:unread-dom',(event,count:unknown)=>{
     const service=[...views.entries()].find(([,child])=>child.webContents===event.sender)?.[0] as keyof typeof sites|undefined
     if(!service||event.senderFrame!==event.sender.mainFrame||!isWorkspaceUrl(service,event.sender.getURL()))return
     if(count!==null&&count!=='dot'&&(typeof count!=='number'||!Number.isInteger(count)||count<0||count>999999))return
     if(count===null)domUnread.delete(service);else domUnread.set(service,count as UnreadValue)
     const next=count===null?unreadFromTitle(event.sender.getTitle()):count as UnreadValue
-    if(unreadCounts[service]!==next){unreadCounts[service]=next;void diagnostic('workspace-unread',{host:service,code:`dom:${next}`});if(!window.isDestroyed())window.webContents.send('workspace:unread-changed',{...unreadCounts})}
+    updateUnreadCount(service,next,'dom')
   })
   ipcMain.handle('workspace:unread',event=>{trusted(event);return {...unreadCounts}})
   let meetingSession:{token:string;contents:Electron.WebContents;model:string;cloud:boolean}|null=null
   const stopMeeting=()=>{meetingSession=null;for(const [id,controller] of aiRequests)if(id.startsWith('meeting-')){controller.abort();aiRequests.delete(id)}}
+  notificationWorkspaceActivator=activateWorkspace
+  if(pendingNotificationWorkspace){const service=pendingNotificationWorkspace;pendingNotificationWorkspace=undefined;activateWorkspace(service)}
   ipcMain.handle('meeting:start',async(event,model:unknown)=>{
     trusted(event)
     if(typeof model!=='string'||!model||model.length>200||currentWorkspaceService!=='teams'||!view||!view.getVisible())throw new Error('Anh mở Teams trước khi dịch cuộc họp.')
@@ -252,7 +300,8 @@ app.whenReady().then(async () => {
       await serviceSession.clearCache()
     }
     views.clear()
-    domUnread.clear();unreadCounts.whatsapp=0;unreadCounts.teams=0;unreadCounts.zalo=0
+    for(const timer of notificationWarmupTimers.values())clearTimeout(timer)
+    notificationWarmupTimers.clear();notificationArmed.clear();domUnread.clear();unreadCounts.whatsapp=0;unreadCounts.teams=0;unreadCounts.zalo=0
     window.webContents.send('workspace:unread-changed',{...unreadCounts})
     view=undefined
     const chatgptResult=await chatgpt.clearLocalData()
@@ -393,8 +442,8 @@ app.whenReady().then(async () => {
   ipcMain.handle('notifications:test', async (event) => {
     trusted(event)
     if (!Notification.isSupported()) throw new Error('Thông báo Windows không khả dụng')
-    const notification = new Notification({ title: 'LinguaHub AI Pro', body: 'Thông báo thử nghiệm từ ứng dụng.' })
-    notification.on('click', () => { window.restore(); window.show(); window.focus() })
+    const notification = new Notification(genericWorkspaceNotificationOptions(currentWorkspaceService))
+    routeWorkspaceNotificationClick(notification,currentWorkspaceService,activateWorkspace)
     await new Promise<void>((resolve,reject)=>{
       let settled=false
       let timeout:ReturnType<typeof setTimeout>|undefined
@@ -450,19 +499,14 @@ app.whenReady().then(async () => {
     view = new WebContentsView({ webPreferences: { preload: join(import.meta.dirname, '../preload/chat-view.cjs'), partition: `persist:linguahub-${service}`, nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false } })
     views.set(service, view)
     const serviceContents=view.webContents
-    serviceContents.on('did-start-navigation',(_event,_url,_inPlace,isMainFrame)=>{if(isMainFrame)domUnread.delete(service)})
+    serviceContents.on('did-start-navigation',(_event,_url,_inPlace,isMainFrame)=>{if(isMainFrame){const timer=notificationWarmupTimers.get(service);if(timer)clearTimeout(timer);notificationWarmupTimers.delete(service);notificationArmed.delete(service);domUnread.delete(service);if(unreadCounts[service]!==0){unreadCounts[service]=0;if(!window.isDestroyed())window.webContents.send('workspace:unread-changed',{...unreadCounts})}}})
     const updateUnread=(title:string)=>{
       if(!isWorkspaceUrl(service,serviceContents.getURL()))return
       const count=domUnread.get(service)??unreadFromTitle(title)
-      if(unreadCounts[service]===count)return
-      unreadCounts[service]=count
-      void diagnostic('workspace-unread',{host:service,code:`title:${count}`})
-      // Native website notifications remain responsible for delivery; do not
-      // create a second toast from the unread title counter.
-      if(!window.isDestroyed())window.webContents.send('workspace:unread-changed',{...unreadCounts})
+      updateUnreadCount(service,count,'title')
     }
     serviceContents.on('page-title-updated',(_event,title)=>updateUnread(title))
-    serviceContents.on('did-finish-load',()=>updateUnread(serviceContents.getTitle()))
+    serviceContents.on('did-finish-load',()=>{updateUnread(serviceContents.getTitle());scheduleNotificationWarmup(service,serviceContents)})
     if(service==='zalo'){
       let remaining=100
       serviceContents.session.webRequest.onErrorOccurred(details=>{
@@ -476,15 +520,13 @@ app.whenReady().then(async () => {
     let zaloStorageAllowed=false
     serviceContents.on('focus',()=>{if(view?.webContents!==serviceContents||!window.isVisible()||window.isMinimized())activateWorkspace(service)})
     serviceContents.session.setPermissionCheckHandler((contents,permission,origin,details)=>{
-      if(permission==='notifications')return canShowWorkspaceNotification(service,permission,origin,notificationPermissions[service],contents===null||contents===serviceContents)
+      if(permission==='notifications')return false
       if(service==='zalo')return zaloStorageAllowed&&isZaloStorageRequest(permission,serviceContents.getURL(),origin,contents===serviceContents||!!contents&&zaloAuthContents.has(contents))&&(!details.embeddingOrigin||isWorkspaceUrl('zalo',details.embeddingOrigin))
-      return canShowWorkspaceNotification(service,permission,origin,notificationPermissions[service],contents===null || contents===serviceContents)
+      return false
     })
     serviceContents.session.setPermissionRequestHandler(async(contents,permission,callback,details)=>{
       if(permission==='notifications'){
-        const origin=details.requestingUrl||contents?.getURL()||''
-        if((contents!==null&&contents!==serviceContents)||!isNotificationOrigin(service,origin)){callback(false);return}
-        try{callback(await grantNotificationPermission(service))}catch{callback(false)}
+        callback(false)
         return
       }
       if(service==='zalo'){
@@ -495,7 +537,7 @@ app.whenReady().then(async () => {
       }
       callback(false)
     })
-    if(service==='teams')installTeamsMeetingPermissions(serviceContents,window,()=>notificationPermissions.teams,()=>grantNotificationPermission('teams'))
+    if(service==='teams')installTeamsMeetingPermissions(serviceContents,window,()=>false,async()=>false)
     // Keep the real Chromium version; remove application-specific product tokens
     // that legacy browser-version parsers can mistake for the browser version.
     const chromiumUserAgent = view.webContents.getUserAgent()

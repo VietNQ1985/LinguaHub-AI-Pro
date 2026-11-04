@@ -1,23 +1,18 @@
-# Khay hệ thống, thông báo và mặc định dịch
+# Khay hệ thống và thông báo
 
-## Bản sửa sau phản hồi WhatsApp
+LinguaHub giữ một icon ở khay hệ thống. Đóng cửa sổ sẽ thu gọn ứng dụng; menu icon có thể mở LinguaHub, chọn từng workspace hoặc thoát hoàn toàn.
 
-Ảnh người dùng xác nhận WhatsApp báo quyền notifications bị chặn và hướng dẫn biểu tượng thanh địa chỉ không tồn tại trong LinguaHub. Đã bỏ cơ chế từ chối notifications của website; trả lại check/request theo quyền và origin của từng workspace, gồm Zalo Web. Bật quyền trong Cài đặt nâng cao rồi tải lại tab. Nếu trang chủ động requestPermission, LinguaHub hỏi qua dialog riêng. Không tự cấp quyền camera/microphone hay origin đăng nhập Zalo. Teams dùng policy thiết bị cũ với callback quyền notification thật.
+## Thông báo riêng tư
 
-Đã bỏ toast phụ sinh từ title để không tạo trùng; title vẫn dùng cho huy hiệu. Sự kiện focus của WebContents đưa về đúng workspace và mở lại cửa sổ nếu bị ẩn/minimize. Chưa xác nhận click toast native/service worker thực tế, nên lỗi click không được coi là đã khắc phục hoàn toàn. Các mô tả cơ chế toast-owned phía dưới là lịch sử bản trước, đã được thay thế bởi bản sửa này. Typecheck, 7 test policy/shortcut/store và build đạt.
+- Thông báo Windows từ WhatsApp, Teams và Zalo Web chỉ hiện `LinguaHub AI Pro` và `Có thông báo mới.`
+- Tên người gửi, nội dung chat, tên cuộc trò chuyện và số chưa đọc không được đưa vào toast.
+- LinguaHub từ chối Notification API của các website và Service Worker để tránh toast có nội dung; cài đặt riêng của từng website không thể làm lộ nội dung qua hệ thống này.
+- Cài đặt nâng cao bật/tắt toast chung của LinguaHub độc lập cho từng dịch vụ.
+- Toast phát khi bộ đếm/huy hiệu chưa đọc tăng sau lần nhận diện đầu tiên. Bộ đếm ban đầu chỉ làm mốc, không phát thông báo cũ.
+- Cú bấm mở/khôi phục LinguaHub rồi chọn đúng tab nguồn. Toast Windows lưu activation argument giới hạn ở ba mã workspace; preload giữ sự kiện nếu renderer chưa sẵn sàng.
 
+Thông báo dựa trên dấu chưa đọc mà website để lộ. Nếu website không cập nhật badge/count khi có tin mới, LinguaHub không phát hiện được tin đó từ notification gốc vì nội dung của notification gốc bị chặn.
 
-- Đã gỡ Zalo PC, helper native, IPC và phần dịch nhập tay đi kèm. Giữ nguyên phiên Zalo Web; không xóa dữ liệu của Zalo PC trên máy.
-- Nút thu gọn trên thanh công cụ và nút đóng cửa sổ đưa LinguaHub xuống system tray nếu tạo được icon. Nhấp đúp icon để mở; menu cho mở từng workspace hoặc **Thoát hoàn toàn**. Nếu không tạo được tray, nút đóng vẫn thoát, tránh app ẩn không khôi phục được. Không tự khởi động theo Windows.
-- Cài đặt nâng cao có quyền thông báo cho WhatsApp, Teams, Zalo Web, lưu riêng từng dịch vụ. Các quyền cũ giữ nguyên; Zalo mặc định chưa cấp cho đến khi người dùng bật. Đây là thông báo của LinguaHub khi số chưa đọc trong tiêu đề website tăng; chỉ có tên ứng dụng và số đếm, không có người gửi/nội dung. Không tự đọc tin nhắn để tạo thông báo.
-- Không dùng toast do trang/Chromium tạo để tránh luồng click không thuộc ứng dụng. Toast mới do main tạo và click giữ service nguồn trong closure; chọn đúng WebContentsView, mở/khôi phục LinguaHub và đồng bộ tab React. Không hứa nhảy chính xác tới người gửi. Trang phải được mở ít nhất một lần. Website không công bố số, số cuộc chat không tăng khi thêm tin trong cùng chat, hoặc website ngừng cập nhật khi ẩn: có thể không có thông báo. Chưa có adapter thông báo nội dung hay service worker đầy đủ.
-- Bỏ CLSID tùy chỉnh chưa đăng ký khỏi shortcut và không gọi setToastActivatorCLSID tùy chỉnh. Menu ứng dụng tiếng Việt thay menu mặc định Electron; không có mục About Electron. Cần xác minh lại click toast thật trên Windows, đặc biệt sau khi app thoát hoàn toàn; không cam kết hỗ trợ kích hoạt toast cũ hoặc app đã thoát.
-- Dịch tin nhắn là chế độ mặc định. Khi có model và đang ở WhatsApp/Teams, app xin quyền đọc và bật dịch; quyền cloud ChatGPT riêng vẫn bắt buộc. Nếu từ chối thì không đọc/gửi. Không tự dịch Zalo Web. Tạm dừng vẫn dùng được. Đổi model/chế độ không được dùng kết quả cấp quyền muộn đã lỗi thời. Khi ẩn xuống tray, bộ đọc tin nhắn trả null, không đọc/gửi chat ẩn.
+## Kiểm chứng
 
-Kiểm thử tự động: cấu hình notification Zalo được lưu/reset; origin policy chặn login/lookalike; mỗi toast giữ đúng dịch vụ khi nhiều toast liên tiếp; mặc định dịch và streaming không tạo yêu cầu lặp. Chưa smoke test tray, click toast và nhận thông báo Zalo thật trên Windows cho bản này. Không coi test mock là xác nhận end-to-end.
-
-Validation: npm run typecheck đạt; toàn bộ 28 file/103 test đạt, sau đó thêm regression từ chối quyền/kết quả cấp quyền lỗi thời và chạy LiveTranslation.test.tsx 2/2 đạt. npm run build đạt. Đóng gói bản cuối ở release-final để tránh ghi đè job đóng gói trước đó. Chưa cài hoặc mở bản mới, không kiểm thử cloud thật hay thao tác thông báo Windows thật.
-
-Kiểm tra archive phát hiện helper cũ còn trong out/native từ build trước. Quy tắc đóng gói đã đổi sang chỉ lấy main/preload/renderer, loại output native cũ. Bản giao cuối dùng release-tray. Không phân phối các gói trung gian release/release-final.
-
-Installer cuối release-tray/LinguaHub-AI-Pro-Setup.exe đóng gói thành công. SHA-256: 79c780b87045b3a5f3fcc6cf9a0011fdd911e8227f9fd7deb1946ad27faffd10. Đối chiếu main/preload/renderer HTML khớp build hiện tại, không có ZaloCompanion hoặc out/native trong archive. Chưa cập nhật bản đang cài, chưa xác minh tray/click toast end-to-end trên Windows.
+`workspace-notifications.test.ts` kiểm tra nội dung toast cố định, mốc ban đầu, tăng bộ đếm, đóng/mở lại dot, định tuyến click và kiểm tra activation argument. Các test này không thay cho xác nhận banner/cú click thật trong Windows Action Center.

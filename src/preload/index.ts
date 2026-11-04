@@ -1,4 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron'
+const shortcutListeners=new Set<(action:string)=>void>()
+const queuedShortcuts:string[]=[]
+ipcRenderer.on('app:shortcut',(_event,action:string)=>{
+  if(shortcutListeners.size){for(const listener of shortcutListeners)listener(action);return}
+  queuedShortcuts.push(action)
+  if(queuedShortcuts.length>10)queuedShortcuts.shift()
+})
 contextBridge.exposeInMainWorld('lingua', {
   hideToTray:()=>ipcRenderer.invoke('window:tray'),
   getWorkspaceUnread:()=>ipcRenderer.invoke('workspace:unread'),
@@ -8,9 +15,9 @@ contextBridge.exposeInMainWorld('lingua', {
     return ()=>ipcRenderer.removeListener('workspace:unread-changed',listener)
   },
   onShortcut: (callback:(action:string)=>void) => {
-    const listener=(_event:Electron.IpcRendererEvent,action:string)=>callback(action)
-    ipcRenderer.on('app:shortcut',listener)
-    return ()=>ipcRenderer.removeListener('app:shortcut',listener)
+    shortcutListeners.add(callback)
+    for(const action of queuedShortcuts.splice(0))callback(action)
+    return ()=>shortcutListeners.delete(callback)
   },
   reloadWorkspace: () => ipcRenderer.invoke('workspace:reload'),
   setWorkspacePanelLayout: (panelWidth:number,collapsed:boolean,persist=false) => ipcRenderer.send('workspace:panel-layout',{panelWidth,collapsed,persist}),

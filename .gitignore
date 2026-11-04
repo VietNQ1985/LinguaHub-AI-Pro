@@ -17,3 +17,4 @@ coverage/
 !.env.example
 /release-final/
 /release-tray/
+/release-notify/

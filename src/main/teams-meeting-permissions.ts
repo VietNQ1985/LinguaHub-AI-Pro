@@ -3,12 +3,12 @@ export function trustedTeamsOrigin(value:string){
  try{const url=new URL(value);return url.protocol==='https:'&&!url.username&&!url.password&&['teams.microsoft.com','teams.cloud.microsoft'].some(host=>url.hostname===host||url.hostname.endsWith('.'+host))}catch{return false}
 }
 export function teamsDeviceRequest(top:string,origin:string,owned:boolean,types:readonly string[]){return owned&&trustedTeamsOrigin(top)&&trustedTeamsOrigin(origin)&&types.length>0&&types.every(type=>type==='audio'||type==='video')}
-export function installTeamsMeetingPermissions(contents:WebContents,parent:BrowserWindow,notificationAllowed:()=>boolean,grantNotification:()=>Promise<boolean>){
+export function installTeamsMeetingPermissions(contents:WebContents,parent:BrowserWindow,_notificationAllowed:()=>boolean,_grantNotification:()=>Promise<boolean>){
  const grants=new Map<string,Set<string>>()
  const trusted=(origin:string)=>!contents.isDestroyed()&&trustedTeamsOrigin(contents.getURL())&&trustedTeamsOrigin(origin)
  contents.on('did-start-navigation',(_event,_url,_inPlace,isMainFrame)=>{if(isMainFrame)grants.clear()})
  contents.session.setPermissionCheckHandler((sender,permission,origin,details)=>{
-  if(permission==='notifications')return (sender===null||sender===contents)&&trusted(origin)&&notificationAllowed()
+  if(permission==='notifications')return false
   if(sender!==contents||!trusted(origin)||details.embeddingOrigin&&!trustedTeamsOrigin(details.embeddingOrigin))return false
   if(permission==='display-capture')return true
   if(permission==='media'){const allowed=grants.get(new URL(origin).origin);return details.mediaType==='audio'||details.mediaType==='video'?!!allowed?.has(details.mediaType):!!allowed?.has('audio')&&!!allowed?.has('video')}
@@ -18,7 +18,7 @@ export function installTeamsMeetingPermissions(contents:WebContents,parent:Brows
   let accepted=false
   try{
    const origin=('securityOrigin' in details?details.securityOrigin:undefined)||details.requestingUrl
-   if(permission==='notifications'){if((sender===null||sender===contents)&&trusted(origin))accepted=await grantNotification();return}
+   if(permission==='notifications')return
    if(sender!==contents||!trusted(origin))return
    if(permission==='display-capture'){accepted=true;return}
    const types=permission==='media'&&'mediaTypes' in details?details.mediaTypes||[]:permission==='speaker-selection'?['speaker-selection']:[]
