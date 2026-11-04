@@ -60,6 +60,7 @@ export function AiPanel() {
   const [englishPreview, setEnglishPreview] = useState('')
   const [previewSource, setPreviewSource] = useState('')
   const [previewConversation, setPreviewConversation] = useState<string | null>(null)
+  const [previewSettingsKey,setPreviewSettingsKey] = useState('')
   const [previewEdited, setPreviewEdited] = useState(false)
   const [composerStatus, setComposerStatus] = useState('')
   const [output, setOutput] = useState<unknown>(null)
@@ -284,6 +285,7 @@ export function AiPanel() {
       setEnglishPreview(translation.trim())
       setPreviewSource(draft)
       setPreviewConversation(snapshot?.conversationId??null)
+      setPreviewSettingsKey(JSON.stringify([service,model,replyTone]))
       setPreviewEdited(false)
       setComposerStatus(usesChatContext?'Bản xem trước đã dịch theo ngữ cảnh chat hiện tại.':'Bản dịch câu riêng; Zalo chưa được đọc làm ngữ cảnh.')
     }catch(failure){if(valid()){setError(failure instanceof Error?failure.message:'Chưa dịch được câu trả lời.');setComposerStatus('Chưa tạo được bản xem trước.')}}
@@ -294,6 +296,7 @@ export function AiPanel() {
     setEnglishPreview(reply.english)
     setPreviewSource(reply.vietnamese)
     setPreviewConversation(replyConversation.current)
+    setPreviewSettingsKey(JSON.stringify([service,model,replyTone]))
     setPreviewEdited(false)
     setComposerStatus('Đã đưa gợi ý vào composer. Anh có thể sửa hai bản trước khi sao chép.')
     replyDraftRef.current?.focus()
@@ -305,7 +308,8 @@ export function AiPanel() {
   })
   const previewMatchesDraft=previewSource.trim()===replyDraft.trim()
   const previewContextIsCurrent=previewConversation===null||(boundConversation!==null&&previewConversation===boundConversation)
-  const canCopyPreview=Boolean(englishPreview.trim()&&previewContextIsCurrent&&previewMatchesDraft&&!busy)
+  const previewSettingsCurrent=previewSettingsKey===JSON.stringify([service,model,replyTone])
+  const canCopyPreview=Boolean(englishPreview.trim()&&previewContextIsCurrent&&previewMatchesDraft&&previewSettingsCurrent&&!busy)
   const copyEnglishPreview=async()=>{
     if(!canCopyPreview)return
     try{await window.lingua.writeClipboardText(englishPreview);setComposerStatus('Đã sao chép. Anh dán vào ô chat, kiểm tra người nhận rồi tự gửi.')}
@@ -371,6 +375,7 @@ export function AiPanel() {
         {englishPreview&&!previewMatchesDraft&&<p className="composer-warning">Câu tiếng Việt đã thay đổi. Bản tiếng Anh cũ chỉ để tham khảo; hãy dịch lại trước khi sao chép.</p>}
         {englishPreview&&previewEdited&&previewMatchesDraft&&<p className="helper-text">Bản tiếng Anh đã chỉnh sửa thủ công và sẵn sàng sao chép sau khi kiểm tra nội dung.</p>}
         {englishPreview&&!previewContextIsCurrent&&<p className="composer-warning">Cuộc trò chuyện đã đổi. Bản cũ chỉ để tham khảo; hãy dịch lại trước khi sao chép.</p>}
+         {englishPreview&&!previewSettingsCurrent&&<p className="composer-warning">Nền tảng, mô hình hoặc giọng điệu đã đổi. Anh cần tạo lại bản dịch trước khi sao chép.</p>}
         <div className="composer-actions">
           <button type="button" className="secondary-button" disabled={!canCopyPreview} onClick={()=>void copyEnglishPreview()}>Sao chép để gửi trong chat</button>
           <button type="button" className="send-disabled" disabled title="Chưa có adapter đủ tin cậy để xác thực người nhận và xác nhận trạng thái gửi.">Gửi trực tiếp chưa khả dụng</button>
