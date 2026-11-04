@@ -9,3 +9,5 @@ Trang phải được mở ít nhất một lần trong lượt chạy app. Sele
 Log chẩn đoán workspace-unread chỉ ghi tên dịch vụ cố định, nguồn dom/title và số/dot, không có nội dung chat hay URL. Giữ cơ chế xoay vòng log hiện có.
 
 Validation ngày 04/11/2026: typecheck đạt, toàn bộ 29 file/109 test đạt (bao gồm số, chấm, xóa badge, cộng trùng, node ẩn và cleanup). Build đạt. Chạy scripts/smoke-unread-electron.cjs bằng Electron 45 với HTTPS fixture trong session riêng: cả WhatsApp/Teams/Zalo đều nhận 2 → 5 → 0 qua preload sandbox/contextIsolation và IPC frame chính khi view ẩn, title không đổi. Fixture không tải website hoặc tài khoản thật. Chưa xác minh marker và nhận tin thật trên phiên đang đăng nhập của người dùng; cần cập nhật app rồi kiểm tra.
+
+Đóng gói NSIS thành công: release-tray/LinguaHub-AI-Pro-Setup.exe, SHA-256 041b3ccac7b651b0ca9f5d43e7e173ecf4bc8f0eea75f239b77c120831316c54. Đối chiếu archive main/preload chat-view/preload renderer/HTML khớp bản build. Kiểm tra app đang cài chưa có workspace:unread-dom trong preload. Chưa thay file vì app còn chạy trong tray; đã đề nghị người dùng Thoát hoàn toàn. Chưa có kết quả website thật trên bản mới.
