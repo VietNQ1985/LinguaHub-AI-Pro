@@ -92,14 +92,21 @@ test('contextual composer translates once, preserves English edits and copies on
   const preview=container.querySelector('#reply-composer-english') as HTMLTextAreaElement
   expect(preview.value).toBe('I will check this UOM again.')
   await act(async()=>setTextareaValue(dom,preview,'I will review the UOM again.'))
-  await act(async()=>setTextareaValue(dom,draft,'Em sẽ rà lại đơn vị tính.'))
-  expect(preview.value).toBe('I will review the UOM again.')
-  expect(container.textContent).toContain('Bản tiếng Anh đã sửa thủ công được giữ nguyên')
   const copy=[...container.querySelectorAll('button')].find(item=>item.textContent==='Sao chép để gửi trong chat')!
   expect(copy.disabled).toBe(false)
   await act(async()=>copy.click())
   expect(writeClipboardText).toHaveBeenCalledWith('I will review the UOM again.')
   expect(container.textContent).toContain('dán vào ô chat')
+  writeClipboardText.mockClear()
+  await act(async()=>setTextareaValue(dom,draft,'Em sẽ rà lại đơn vị tính.'))
+  expect(preview.value).toBe('I will review the UOM again.')
+  expect(container.textContent).toContain('Bản tiếng Anh cũ chỉ để tham khảo')
+  expect(copy.disabled).toBe(true)
+  await act(async()=>copy.click())
+  expect(writeClipboardText).not.toHaveBeenCalled()
+  await act(async()=>{translate.click();await new Promise(resolve=>setTimeout(resolve,10))})
+  expect(copy.disabled).toBe(false)
+  expect(runAi).toHaveBeenCalledTimes(2)
  }finally{await act(async()=>root.unmount());dom.window.close();vi.unstubAllGlobals()}
 })
 
