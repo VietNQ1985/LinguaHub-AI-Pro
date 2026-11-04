@@ -406,7 +406,7 @@ app.whenReady().then(async () => {
     if(typeof model!=='string'||typeof text!=='string'||(requestId!==undefined&&(typeof requestId!=='string'||requestId.length<1||requestId.length>100)))throw new Error('Nội dung không hợp lệ')
     if(options!==undefined&&(!options||typeof options!=='object'||typeof (options as {replyFast?:unknown}).replyFast!=='boolean'||Object.keys(options).some(key=>key!=='replyFast')))throw new Error('Cấu hình gợi ý không hợp lệ.')
     if(masking)text=maskSensitive(text)
-    if(model.startsWith('chatgpt:')&&!hasCloudConsentForTask(task,cloudConsent,backgroundCloudConsent))throw new Error(task==='translateLatest'||task==='translateMessages'?'Anh cần cho phép gửi chữ tin nhắn hiển thị đến ChatGPT trước.':'Anh cần cho phép xử lý cloud trước khi gửi nội dung.')
+    if(model.startsWith('chatgpt:')&&!hasCloudConsentForTask(task,cloudConsent,backgroundCloudConsent))throw new Error(task==='translateLatest'||task==='translateMessages'||task==='replyTranslationFromChat'?'Anh cần cho phép gửi chữ tin nhắn hiển thị đến ChatGPT trước.':'Anh cần cho phép xử lý cloud trước khi gửi nội dung.')
     let reasoningEffort=model.startsWith('chatgpt:')&&isGpt6Model(model.slice(8))
       ? reasoningEffortForTask(task,learning.getReasoningEffort(),learning.getTranslationReasoningEffort(),learning.getFastMode(),FAST_REASONING_EFFORT)
       : undefined

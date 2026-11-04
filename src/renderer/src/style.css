@@ -157,6 +157,32 @@ h2, h3, h4 { color: var(--text); }
 .reply-view textarea { min-height: 125px; resize: vertical; line-height: 1.55; }
 .reply-view .primary-button { width: 100%; margin-top: 12px; }
 .reply-results { margin-top: 18px; }
+.suggestion-actions { display:flex; flex-wrap:wrap; gap:7px; margin-top:12px; }
+.suggestion-actions button { flex:1 1 145px; }
+.reply-composer {
+  position: sticky; bottom: 0; z-index: 1; margin: 8px 12px 14px; padding: 15px;
+  border: 1px solid var(--border); border-radius: 14px; background: var(--surface);
+  box-shadow: 0 -8px 24px rgb(15 23 42 / 8%); min-width: 0;
+}
+.composer-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:12px; }
+.composer-heading h3 { margin:0; font-size:16px; }
+.composer-heading p { color:var(--muted); font-size:12px; margin-top:3px; }
+.reply-composer label { display:block; margin:11px 0 6px; color:var(--text); font-size:13px; font-weight:600; }
+.reply-composer textarea, .composer-options select {
+  display:block; width:100%; min-width:0; padding:10px 11px; border:1px solid var(--border);
+  border-radius:9px; background:var(--surface); color:var(--text); font-size:13px; line-height:1.5;
+}
+.reply-composer textarea { min-height:78px; resize:vertical; overflow-wrap:anywhere; }
+.composer-options { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:6px 8px; align-items:center; margin-top:9px; }
+.composer-options label { margin:0; }
+.composer-options select { min-width:0; }
+.composer-options button { grid-column:1 / -1; justify-self:start; }
+.composer-translate { width:100%; margin-top:11px; }
+.composer-warning { margin-top:8px; padding:8px 10px; border-radius:8px; color:var(--text); background:var(--soft); font-size:12px; line-height:1.45; }
+.composer-actions { display:flex; flex-wrap:wrap; gap:7px; margin-top:10px; }
+.composer-actions button { flex:1 1 150px; min-width:0; overflow-wrap:anywhere; }
+.send-disabled { border:1px solid var(--border); border-radius:8px; padding:10px 12px; background:var(--soft); color:var(--muted); font-size:13px; cursor:not-allowed; }
+.composer-status { margin-top:9px; color:var(--muted); font-size:12px; line-height:1.45; overflow-wrap:anywhere; }
 .notice { border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin: 10px 0; color: var(--text); }
 .notice h4 { margin: 0 0 10px; font-size: 14px; }
 .notice p { margin: 10px 0; font-size: 14px; }

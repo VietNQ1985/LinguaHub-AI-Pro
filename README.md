@@ -12,7 +12,11 @@ LinguaHub mở WhatsApp Web hoặc Microsoft Teams Web trong cửa sổ riêng v
 
 ## Gợi ý trả lời theo cuộc trò chuyện
 
-Trong **Gợi ý trả lời**, nhấn **Đọc chat & gợi ý trả lời** để tạo ba cách trả lời dựa trên các tin đang hiển thị. Có thể thêm ý muốn nói bằng tiếng Việt hoặc để trống để AI tự đề xuất theo ngữ cảnh. LinguaHub chỉ đưa bản nháp, không tự gửi. ChatGPT cần quyền đọc cục bộ và quyền gửi chữ chat hiển thị riêng; Ollama xử lý trên máy.
+Trong **Gợi ý trả lời cho chat này**, nhấn **Tạo 3 gợi ý** để xem ba cách trả lời từ các tin đang hiển thị. Chọn **Dùng câu này** để đưa câu vào **Soạn câu trả lời**. Anh có thể sửa tiếng Việt, chọn giọng điệu, dịch lại theo ngữ cảnh rồi sửa bản tiếng Anh. Bản tiếng Anh sửa tay được giữ nguyên cho đến khi anh chủ động bấm dịch lại. Gợi ý không tự tạo theo từng tin mới để tránh gửi thêm yêu cầu AI ngoài ý muốn.
+
+LinguaHub hiện chỉ sao chép bản tiếng Anh để anh tự dán, kiểm tra người nhận và bấm gửi trong WhatsApp/Teams. Nút gửi trực tiếp bị vô hiệu hóa vì app chưa có cơ chế xác thực đúng người nhận và xác nhận tin đã gửi. Zalo Web chưa được đọc/dịch hội thoại; composer trên Zalo chỉ dịch câu anh tự nhập, không có ngữ cảnh chat. Xem [ma trận hỗ trợ nhắn tin V2](docs/v2-messaging-capabilities.md).
+
+Composer cần quyền đọc chat đang hiển thị và quyền ChatGPT cloud riêng khi chọn ChatGPT; Ollama xử lý trên máy. Nhập giọng nói hiện dùng Windows Win+H, không phải microphone ghi âm tích hợp.
 
 Trong Cài đặt, model mặc định là **GPT-6 Luna**. Mức suy luận mặc định **Max** áp dụng cho gợi ý trả lời và tác vụ AI khác; dịch có mức riêng mặc định **Low**. **Ưu tiên tốc độ khi dịch** cũng chỉ áp dụng cho dịch và dùng Low. Anh có thể chọn mức dịch riêng mà không đổi mức của tác vụ khác.
 

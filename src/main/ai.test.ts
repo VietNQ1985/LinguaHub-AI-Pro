@@ -128,3 +128,25 @@ test('chat reply copilot accepts visible conversation context and an optional in
   expect(instructions).toContain('most recent visible chat context')
   await expect(runLocalAi('replyFromChat',JSON.stringify({messages:[]}), 'local',async()=>JSON.stringify(valid))).rejects.toThrow()
 })
+
+test('translates a Vietnamese reply using bounded chat context, tone and ERP terms',async()=>{
+  const input=JSON.stringify({
+    messages:[{side:'left',text:'The UOM is still correct in the test code management.'}],
+    draft:'Em sẽ kiểm tra lại UOM này.',
+    tone:'professional',
+  })
+  let instructions=''
+  const result=await runLocalAi('replyTranslationFromChat',input,'local',async(_model,_input,prompt)=>{
+    instructions=prompt
+    return JSON.stringify({translation:'I will check this UOM again.'})
+  }) as {translation:string}
+  expect(result.translation).toBe('I will check this UOM again.')
+  expect(instructions).toContain('Requested tone: professional')
+  expect(instructions).toContain('The UOM is still correct')
+  expect(instructions).toContain('Vietnamese reply draft')
+  expect(instructions).toContain('do not add promises or claims')
+  expect(instructions).toContain('UOM: đơn vị tính (UOM)')
+  expect(reasoningEffortForTask('replyTranslationFromChat','max','low',false)).toBe('low')
+  expect(reasoningEffortForTask('replyTranslationFromChat','max','low',true)).toBe('low')
+  await expect(runLocalAi('replyTranslationFromChat',JSON.stringify({...JSON.parse(input),messages:[]}), 'local',async()=>JSON.stringify({translation:'I will check.'}))).rejects.toThrow()
+})

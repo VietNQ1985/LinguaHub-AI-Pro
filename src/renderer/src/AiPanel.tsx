@@ -9,6 +9,8 @@ import { DEFAULT_CHATGPT_MODEL, DEFAULT_REASONING_EFFORT, DEFAULT_TRANSLATION_RE
 
 type PanelMode = 'translate' | 'settings'
 type Theme = 'light' | 'dark'
+type ReplyTone = 'professional' | 'friendly' | 'concise'
+type ReplyChoice = { english: string; vietnamese: string }
 const reasoningEffortLabels: Record<ReasoningEffort, string> = {
   none: 'Tắt suy luận (None)',
   low: 'Thấp (Low)',
@@ -53,6 +55,13 @@ export function AiPanel() {
   const [modelReasoningEfforts, setModelReasoningEfforts] = useState<Record<string,ReasoningEffort[]>>({})
   const [theme, setTheme] = useState<Theme>('light')
   const [input, setInput] = useState('')
+  const [replyDraft, setReplyDraft] = useState('')
+  const [replyTone, setReplyTone] = useState<ReplyTone>('professional')
+  const [englishPreview, setEnglishPreview] = useState('')
+  const [previewSource, setPreviewSource] = useState('')
+  const [previewConversation, setPreviewConversation] = useState<string | null>(null)
+  const [previewEdited, setPreviewEdited] = useState(false)
+  const [composerStatus, setComposerStatus] = useState('')
   const [output, setOutput] = useState<unknown>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -62,14 +71,19 @@ export function AiPanel() {
   const replyConversation = useRef<string | null>(null)
   const [boundConversation,setBoundConversation]=useState<string|null>(null)
   const intentRef = useRef<HTMLTextAreaElement>(null)
+  const replyDraftRef = useRef<HTMLTextAreaElement>(null)
   const [voiceHelp,setVoiceHelp]=useState(false)
   const [replyFast,setReplyFast]=useState(false)
-  const invalidateReply=()=>{
-    requestGeneration.current++
-    replyConversation.current=null;setBoundConversation(null)
-    if(activeReply.current)void window.lingua.cancelAi(activeReply.current).catch(()=>{})
+  const cancelActiveRequest=()=>{
+    if(activeReply.current){requestGeneration.current++;void window.lingua.cancelAi(activeReply.current).catch(()=>{})}
     activeReply.current=null
-    setBusy(false);setOutput(null);stopReplyPlayback()
+    setBusy(false);stopReplyPlayback()
+  }
+  const invalidateReply=()=>{
+    cancelActiveRequest()
+    replyConversation.current=null
+    setBoundConversation(null)
+    setOutput(null)
   }
   useEffect(()=>{
     const reset=()=>invalidateReply()
@@ -79,7 +93,7 @@ export function AiPanel() {
   },[])
   useEffect(()=>{invalidateReply()},[model,mode])
   useEffect(()=>{
-    if(!boundConversation || (!busy && output===null))return
+    if(!boundConversation || (!busy && output===null && previewConversation===null))return
     let disposed=false,checking=false
     const generation=requestGeneration.current
     const check=async()=>{
@@ -87,14 +101,14 @@ export function AiPanel() {
       checking=true
       try{
         const next=await window.lingua.readVisibleChat()
-        if(!disposed&&generation===requestGeneration.current&&replyConversation.current===boundConversation&&next?.conversationId!==boundConversation)invalidateReply()
+        if(!disposed&&generation===requestGeneration.current&&replyConversation.current===boundConversation&&next?.conversationId!==boundConversation){setComposerStatus('Cuộc trò chuyện đã đổi. Hãy tạo lại bản dịch trước khi sao chép.');invalidateReply()}
       }catch{if(!disposed&&generation===requestGeneration.current)invalidateReply()}
       finally{checking=false}
     }
     const unsubscribe=window.lingua.onVisibleChatChanged(()=>void check())
     const timer=setInterval(()=>void check(),1000)
     return ()=>{disposed=true;unsubscribe();clearInterval(timer)}
-  },[boundConversation,busy,output])
+  },[boundConversation,busy,output,previewConversation])
 
 
   useEffect(() => {
@@ -222,6 +236,81 @@ export function AiPanel() {
   }
   const sendReplyRequest=()=>generateReply(false)
   const sendContextualReplyRequest=()=>generateReply(true)
+  const translateReplyDraft=async()=>{
+    const draft=replyDraft.trim()
+    if(!model||busy||draft.length<2)return
+    invalidateReply()
+    const generation=requestGeneration.current
+    const requestId=crypto.randomUUID()
+    activeReply.current=requestId
+    const valid=()=>generation===requestGeneration.current&&activeReply.current===requestId
+    const usesChatContext=service==='whatsapp'||service==='teams'
+    setBusy(true);setError('');setComposerStatus('Đang chuẩn bị bản xem trước…')
+    try{
+      let snapshot: Awaited<ReturnType<typeof window.lingua.readVisibleChat>>=null
+      if(usesChatContext){
+        let authorized=await window.lingua.hasVisibleChatReadAuthorization()
+        if(!valid())return
+        if(!authorized){authorized=await window.lingua.authorizeVisibleChatRead();if(!valid())return}
+        if(!authorized)throw new Error('Anh chưa cho phép đọc chữ chat đang hiển thị.')
+        snapshot=await window.lingua.readVisibleChat()
+        if(!valid())return
+        if(!snapshot?.conversationId||!snapshot.messages.length)throw new Error('Chưa nhận diện được tin nhắn đang hiển thị để dịch theo ngữ cảnh.')
+        replyConversation.current=snapshot.conversationId
+        setBoundConversation(snapshot.conversationId)
+      }
+      if(model.startsWith('chatgpt:')){
+        const allowed=await (usesChatContext?window.lingua.allowBackgroundCloud():window.lingua.allowCloud())
+        if(!valid())return
+        if(!allowed)throw new Error('Anh chưa cho phép xử lý nội dung bằng ChatGPT.')
+      }
+      if(snapshot){
+        const current=await window.lingua.readVisibleChat()
+        if(!valid())return
+        if(current?.conversationId!==snapshot.conversationId){invalidateReply();setComposerStatus('Cuộc trò chuyện đã đổi. Hãy mở lại bản nháp trong đúng chat rồi dịch lại.');return}
+      }
+      const task=usesChatContext?'replyTranslationFromChat':'translate'
+      const payload=usesChatContext?JSON.stringify({messages:recentChatContext(snapshot!.messages),draft,tone:replyTone}):draft
+      if(!valid())return
+      const result=await window.lingua.runAi(task,payload,model,requestId)
+      if(!valid())return
+      if(snapshot){
+        const current=await window.lingua.readVisibleChat()
+        if(!valid())return
+        if(current?.conversationId!==snapshot.conversationId){invalidateReply();setComposerStatus('Cuộc trò chuyện đã đổi. Bản xem trước cũ được giữ để tham khảo; hãy dịch lại trước khi sao chép.');return}
+      }
+      const translation=(result as {translation?:unknown})?.translation
+      if(typeof translation!=='string'||!translation.trim())throw new Error('AI chưa tạo được bản tiếng Anh hợp lệ.')
+      setEnglishPreview(translation.trim())
+      setPreviewSource(draft)
+      setPreviewConversation(snapshot?.conversationId??null)
+      setPreviewEdited(false)
+      setComposerStatus(usesChatContext?'Bản xem trước đã dịch theo ngữ cảnh chat hiện tại.':'Bản dịch câu riêng; Zalo chưa được đọc làm ngữ cảnh.')
+    }catch(failure){if(valid()){setError(failure instanceof Error?failure.message:'Chưa dịch được câu trả lời.');setComposerStatus('Chưa tạo được bản xem trước.')}}
+    finally{if(activeReply.current===requestId)activeReply.current=null;if(generation===requestGeneration.current)setBusy(false)}
+  }
+  const useSuggestedReply=(reply:ReplyChoice)=>{
+    setReplyDraft(reply.vietnamese)
+    setEnglishPreview(reply.english)
+    setPreviewSource(reply.vietnamese)
+    setPreviewConversation(replyConversation.current)
+    setPreviewEdited(false)
+    setComposerStatus('Đã đưa gợi ý vào composer. Anh có thể sửa hai bản trước khi sao chép.')
+    replyDraftRef.current?.focus()
+  }
+  const discardSuggestion=(style:string)=>setOutput((current:unknown)=>{
+    if(!current||typeof current!=='object'||!('replies' in current)||!Array.isArray((current as {replies:unknown[]}).replies))return current
+    const next=(current as {replies:Array<{style?:unknown}>}).replies.filter(reply=>reply.style!==style)
+    return next.length?{...(current as object),replies:next}:null
+  })
+  const previewMatchesDraft=previewSource.trim()===replyDraft.trim()
+  const previewContextIsCurrent=previewConversation===null||(boundConversation!==null&&previewConversation===boundConversation)
+  const canCopyPreview=Boolean(englishPreview.trim()&&previewContextIsCurrent&&(previewMatchesDraft||previewEdited))
+  const copyEnglishPreview=async()=>{
+    if(!canCopyPreview)return
+    try{await window.lingua.writeClipboardText(englishPreview);setComposerStatus('Đã sao chép. Anh dán vào ô chat, kiểm tra người nhận rồi tự gửi.')}
+    catch{setComposerStatus('Không sao chép được. Anh thử lại.')}
+  }
 
   return <div className="assistant-shell">
     <div className="assistant-heading">
@@ -233,31 +322,62 @@ export function AiPanel() {
 
     <div className="assistant-content">
       <div className="meeting-modes" role="group" aria-label="Chế độ dịch"><button type="button" aria-pressed={!meetingMode} onClick={()=>{invalidateReply();setMeetingMode(false)}}>Dịch tin nhắn</button><button type="button" disabled={service!=='teams'} aria-pressed={meetingMode} onClick={()=>{invalidateReply();setMeetingMode(true)}}>Dịch cuộc họp</button></div>
-      {service==='zalo'&&<p className="translation-empty">Zalo Web có phiên đăng nhập riêng. Bản này hỗ trợ mở và dùng Zalo, chưa hỗ trợ tự đọc/dịch hội thoại Zalo.</p>}
+      {service==='zalo'&&!meetingMode&&<p className="translation-empty">Zalo Web có phiên đăng nhập riêng. Bản này chưa đọc/dịch được hội thoại Zalo; composer bên dưới chỉ dịch câu anh tự nhập, không dùng ngữ cảnh chat.</p>}
       {service==='teams'&&!meetingMode&&<p className="meeting-hint">Đang ở chế độ dịch tin nhắn. Để đọc phụ đề khi họp: chọn <button type="button" onClick={()=>{invalidateReply();setMeetingMode(true)}}>Dịch cuộc họp</button>, bật phụ đề English trong Teams rồi bấm Bắt đầu dịch.</p>}
       {meetingMode&&mode==='translate'&&<MeetingTranslation model={model}/>}
 
       {/* Keep the translation component mounted: changing tabs or hiding the panel must not stop visible chat reading. */}
       <div style={{ display: mode === 'translate' && !meetingMode && service!=='zalo' ? 'block' : 'none' }} aria-hidden={mode !== 'translate'}>
         <LiveTranslation model={model} active={(service==='whatsapp'||service==='teams')&&!meetingMode} />
-        <details className="reply-suggestions" onToggle={event=>{if(!event.currentTarget.open)invalidateReply()}}>
-          <summary>Gợi ý trả lời</summary>
-          <div className="reply-view">
-            <p className="helper-text">AI đọc các tin nhắn đang hiển thị để gợi ý cách trả lời bằng tiếng Anh. Anh có thể thêm ý riêng hoặc để trống.</p>
-            <label htmlFor="reply-input">Ý anh muốn bổ sung (không bắt buộc)</label>
-            <textarea ref={intentRef} id="reply-input" value={input} maxLength={2000} onChange={event => { setInput(event.target.value); invalidateReply() }} placeholder="Ví dụ: Tôi sẽ kiểm tra lại và phản hồi vào sáng mai." />
-            <button type="button" onClick={()=>{intentRef.current?.focus();setVoiceHelp(true)}}>🎙 Nhập giọng nói Windows (Win+H)</button>
-            {voiceHelp && <p role="status" className="helper-text">Đặt ngôn ngữ bàn phím là Tiếng Việt, nhấn Win+H rồi nói. Windows quản lý quyền microphone và có thể dùng xử lý trực tuyến theo cài đặt của anh. Dừng hoặc đóng thanh Win+H để kết thúc. LinguaHub chưa tích hợp STT cục bộ, không thu hay lưu âm thanh. Anh sửa chữ trong ô rồi tự bấm tạo gợi ý.</p>}
-            <label className="checkbox-label"><input type="checkbox" checked={model.startsWith('chatgpt:')&&replyFast} disabled={!model.startsWith('chatgpt:')} onChange={event=>{invalidateReply();setReplyFast(event.target.checked)}} /> Trả lời nhanh ChatGPT (Low/Medium được model công bố)</label>
-            {!model.startsWith('chatgpt:') && <p className="helper-text">Ollama dùng cấu hình của model cục bộ; tùy chọn Low/Medium này không áp dụng.</p>}
-            {!model && <p className="helper-text">Anh hãy chọn dịch vụ AI trong phần Cài đặt.</p>}
-            <button type="button" className="primary-button" disabled={!model || busy} onClick={() => void sendContextualReplyRequest()}>{busy ? 'Đang đọc chat và tạo gợi ý…' : 'Đọc chat & gợi ý trả lời'}</button>
-            {input.trim() && <button type="button" className="secondary-button reply-manual-button" disabled={!model || busy} onClick={() => void sendReplyRequest()}>Chỉ dùng ý tôi nhập</button>}
-            {output !== null && <div className="reply-results"><AiResult result={output} /></div>}
-            <p className="helper-text">Chỉ lấy chữ trong các tin đang hiển thị. Ứng dụng không tự gửi tin nhắn; anh xem và tự chọn câu trả lời.</p>
-          </div>
-        </details>
       </div>
+
+      {mode==='translate'&&!meetingMode&&service!=='zalo'&&<details className="reply-suggestions" onToggle={event=>{if(!event.currentTarget.open)invalidateReply()}}>
+        <summary>Gợi ý trả lời cho chat này</summary>
+        <div className="reply-view">
+          <p className="helper-text">Tạo ba cách trả lời dựa trên tin nhắn đang hiển thị. Chỉ gửi yêu cầu AI khi anh bấm nút; ứng dụng không tự gửi câu trả lời.</p>
+          <label htmlFor="reply-input">Ý muốn bổ sung (không bắt buộc)</label>
+          <textarea ref={intentRef} id="reply-input" value={input} maxLength={2000} onChange={event=>{setInput(event.target.value);invalidateReply()}} placeholder="Ví dụ: Tôi sẽ kiểm tra lại và phản hồi vào sáng mai." />
+          <button type="button" onClick={()=>{intentRef.current?.focus();setVoiceHelp(true)}}>🎙 Nhập giọng nói bằng Windows (Win+H)</button>
+          {voiceHelp&&<p role="status" className="helper-text">Đây là nhập liệu của Windows, không phải ghi âm trong LinguaHub. Windows quản lý quyền và cách xử lý giọng nói; ứng dụng không thu hay lưu âm thanh.</p>}
+          <label className="checkbox-label"><input type="checkbox" checked={model.startsWith('chatgpt:')&&replyFast} disabled={!model.startsWith('chatgpt:')} onChange={event=>{invalidateReply();setReplyFast(event.target.checked)}} /> Trả lời nhanh ChatGPT (Low/Medium do model công bố)</label>
+          {!model.startsWith('chatgpt:')&&<p className="helper-text">Ollama dùng cấu hình model cục bộ; tùy chọn này không áp dụng.</p>}
+          {!model&&<p className="helper-text">Anh hãy chọn dịch vụ AI trong Cài đặt.</p>}
+          <div className="suggestion-actions">
+            <button type="button" className="primary-button" disabled={!model||busy} onClick={()=>void sendContextualReplyRequest()}>{busy?'Đang đọc chat và tạo gợi ý…':output!==null?'Tạo lại 3 gợi ý':'Tạo 3 gợi ý'}</button>
+            {input.trim()&&<button type="button" className="secondary-button" disabled={!model||busy} onClick={()=>void sendReplyRequest()}>Chỉ dùng ý tôi nhập</button>}
+          </div>
+          {output!==null&&<div className="reply-results"><AiResult result={output} onUseReply={useSuggestedReply} onDiscardReply={discardSuggestion} /></div>}
+          <p className="helper-text">Chỉ lấy chữ trong các tin đang hiển thị. ChatGPT cần quyền xử lý cloud riêng; Ollama xử lý cục bộ.</p>
+        </div>
+      </details>}
+
+      {mode==='translate'&&!meetingMode&&<section className="reply-composer" aria-labelledby="reply-composer-title">
+        <div className="composer-heading"><div><h3 id="reply-composer-title">Soạn câu trả lời</h3><p>{service==='zalo'?'Zalo Web · dịch câu riêng':'Dịch theo ngữ cảnh chat đang mở'}</p></div></div>
+        <label htmlFor="reply-composer-input">Câu trả lời tiếng Việt</label>
+        <textarea ref={replyDraftRef} id="reply-composer-input" value={replyDraft} maxLength={2000} onChange={event=>{setReplyDraft(event.target.value);cancelActiveRequest()}} placeholder="Nhập câu anh muốn trả lời bằng tiếng Việt…" />
+        <div className="composer-options">
+          <label htmlFor="reply-tone">Giọng điệu</label>
+          <select id="reply-tone" value={replyTone} onChange={event=>{cancelActiveRequest();setReplyTone(event.target.value as ReplyTone)}}>
+            <option value="professional">Chuyên nghiệp, lịch sự</option>
+            <option value="friendly">Thân thiện, tự nhiên</option>
+            <option value="concise">Ngắn gọn</option>
+          </select>
+          <button type="button" className="secondary-button" onClick={()=>{replyDraftRef.current?.focus();setVoiceHelp(true)}}>🎙 Nhập giọng nói Windows (Win+H)</button>
+        </div>
+        {voiceHelp&&<p className="helper-text">Win+H là tính năng đọc chính tả của Windows, không phải microphone tích hợp. LinguaHub không thu hoặc lưu âm thanh.</p>}
+        <button type="button" className="primary-button composer-translate" disabled={!model||busy||replyDraft.trim().length<2} onClick={()=>void translateReplyDraft()}>{busy?'Đang dịch…':englishPreview?'Dịch lại bản tiếng Anh':'Dịch theo ngữ cảnh'}</button>
+        <label htmlFor="reply-composer-english">Bản tiếng Anh xem trước · có thể chỉnh sửa</label>
+        <textarea id="reply-composer-english" value={englishPreview} maxLength={4000} onChange={event=>{setEnglishPreview(event.target.value);setPreviewEdited(true);setComposerStatus('Đang giữ nguyên bản tiếng Anh anh sửa; chỉ dịch lại khi anh bấm nút phía trên.')}} placeholder="Bản tiếng Anh sẽ hiện ở đây…" />
+        {englishPreview&&!previewMatchesDraft&&!previewEdited&&<p className="composer-warning">Bản xem trước thuộc câu tiếng Việt trước đó. Hãy dịch lại trước khi sao chép.</p>}
+        {englishPreview&&!previewMatchesDraft&&previewEdited&&<p className="composer-warning">Bản tiếng Anh đã sửa thủ công được giữ nguyên dù câu tiếng Việt thay đổi.</p>}
+        {englishPreview&&!previewContextIsCurrent&&<p className="composer-warning">Cuộc trò chuyện đã đổi. Bản cũ chỉ để tham khảo; hãy dịch lại trước khi sao chép.</p>}
+        <div className="composer-actions">
+          <button type="button" className="secondary-button" disabled={!canCopyPreview} onClick={()=>void copyEnglishPreview()}>Sao chép để gửi trong chat</button>
+          <button type="button" className="send-disabled" disabled title="Chưa có adapter đủ tin cậy để xác thực người nhận và xác nhận trạng thái gửi.">Gửi trực tiếp chưa khả dụng</button>
+        </div>
+        <p id="send-unsupported-help" className="helper-text">Sau khi sao chép, anh dán vào chat, kiểm tra đúng người nhận rồi tự bấm gửi. LinguaHub hiện chưa xác minh được người nhận và kết quả gửi trên WhatsApp, Teams hoặc Zalo.</p>
+        <p className="composer-status" role="status" aria-live="polite">{composerStatus||'Bản tiếng Anh chỉ được tạo khi anh bấm dịch.'}</p>
+      </section>}
 
       {mode === 'settings' && <div className="settings-view">
         <div className="settings-title"><h3>Cài đặt</h3><button type="button" onClick={() => setMode('translate')}>← Quay lại bản dịch</button></div>

@@ -22,6 +22,8 @@ ChatGPT dùng OAuth PKCE qua trình duyệt hệ thống và callback loopback, 
 
 Kết quả AI được kiểm tra bằng Zod. Gợi ý trả lời yêu cầu đủ ba kiểu; tóm tắt/cảnh báo và gợi ý theo dõi phải có dẫn chứng khớp nguyên văn. Kiểm tra cấu trúc không chứng minh mọi kết luận AI chính xác. Tình trạng inference ChatGPT phụ thuộc quota dùng chung của tài khoản.
 
+Composer giữ riêng câu tiếng Việt, bản xem trước tiếng Anh, nguồn ngữ cảnh và trạng thái sửa tay. Tác vụ dịch câu trả lời truyền tối đa 20 tin gần nhất, giọng điệu và bản nháp; reasoning dùng cấu hình dành riêng cho dịch. Thay hội thoại hủy request đang chờ và khóa sao chép bản xem trước gắn với hội thoại cũ. UI chỉ cung cấp sao chép; không có IPC chèn/gửi tin vì adapter hiện chưa thể ràng buộc người nhận và xác minh kết quả.
+
 ## Dữ liệu và phát hành
 
 SQLite qua sql.js/Drizzle lưu từ vựng, lịch ôn, tiến độ, lượt AI theo provider/task, tùy chọn thông báo, theme/model, chiều rộng panel và kỳ hạn lưu. Thống kê không chứa prompt/nội dung chat. Chat không tự lưu. Log chỉ dùng mã sự kiện cố định, không ghi URL/chat/token. Cookie đăng nhập website do Chromium quản lý trong từng profile.

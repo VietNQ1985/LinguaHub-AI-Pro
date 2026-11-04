@@ -7,6 +7,8 @@
 - AI được yêu cầu nhận diện ngôn ngữ từng tin, dịch tiếng Anh sang tiếng Việt và bỏ qua ngôn ngữ khác. Chất lượng và thời gian phản hồi tùy model.
 - Đọc chữ cục bộ và gửi chữ tới ChatGPT cần hai xác nhận riêng. ChatGPT dùng quota tài khoản chia sẻ; một lượt trước đây bị từ chối do quota, nên inference thành công chưa được chứng minh trong lần sửa DOM này. Ollama chạy cục bộ.
 - Không tự gửi tin nhắn, không đọc cookie ChatGPT, không lưu ảnh hoặc nội dung hội thoại, không dùng OCR và không dùng API key.
+- Composer V2 dịch câu Việt sang Anh theo ngữ cảnh WhatsApp/Teams, cho sửa bản xem trước và chỉ sao chép. Gửi trực tiếp/chèn vào ô chat bị khóa vì chưa có adapter xác thực người nhận và xác nhận gửi đáng tin cậy. Zalo Web hiện chưa đọc/dịch hội thoại; câu trong composer trên Zalo được dịch riêng không kèm ngữ cảnh. Xem `docs/v2-messaging-capabilities.md`.
+- Gợi ý trả lời chỉ chạy khi người dùng bấm; không tự phát sinh thêm yêu cầu AI mỗi khi có tin mới. Nhập giọng nói dùng Win+H của Windows; chưa có microphone/STT tích hợp trong app.
 
 ## Xác minh kỹ thuật
 
