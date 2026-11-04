@@ -2,7 +2,8 @@ import React from 'react'
 import { createRoot } from 'react-dom/client'
 import './style.css'
 import { AiPanel } from './AiPanel'
-import {unreadLabel} from '../../shared/workspace-unread'
+import type {UnreadCounts} from '../../shared/workspace-unread'
+import {WorkspaceUnreadBadge} from './WorkspaceUnreadBadge'
 
 type WorkspaceService = 'whatsapp' | 'teams' | 'zalo'
 type UiService=WorkspaceService
@@ -10,8 +11,8 @@ type UiService=WorkspaceService
 declare global {
   interface Window {
     lingua: {
-      getWorkspaceUnread():Promise<{whatsapp:number;teams:number;zalo:number}>
-      onWorkspaceUnread(callback:(counts:{whatsapp:number;teams:number;zalo:number})=>void):()=>void
+      getWorkspaceUnread():Promise<UnreadCounts>
+      onWorkspaceUnread(callback:(counts:UnreadCounts)=>void):()=>void
       hideToTray():Promise<boolean>
       onShortcut(callback: (action: string) => void): () => void
       reloadWorkspace(): Promise<{ title: string }>
@@ -67,14 +68,14 @@ declare global {
 }
 
 function App() {
-  const [unread,setUnread]=React.useState({whatsapp:0,teams:0,zalo:0})
+  const [unread,setUnread]=React.useState<UnreadCounts>({whatsapp:0,teams:0,zalo:0})
   React.useEffect(()=>{
     let alive=true,updated=false
     const stop=window.lingua.onWorkspaceUnread(counts=>{updated=true;if(alive)setUnread(counts)})
     void window.lingua.getWorkspaceUnread().then(counts=>{if(alive&&!updated)setUnread(counts)}).catch(()=>{})
     return()=>{alive=false;stop()}
   },[])
-  const badge=(service:WorkspaceService)=>unread[service]>0?<span className="workspace-unread" role="status" aria-label={`${unread[service]} chưa đọc theo thông báo của ứng dụng`} title="Số chưa đọc do trang cung cấp; có thể là số cuộc trò chuyện">{unreadLabel(unread[service])}</span>:null
+  const badge=(service:WorkspaceService)=><WorkspaceUnreadBadge value={unread[service]}/>
   const [activeService, setActiveService] = React.useState<UiService>('whatsapp')
   const operation=React.useRef(0)
   const [fallbackService, setFallbackService] = React.useState<WorkspaceService | null>(null)

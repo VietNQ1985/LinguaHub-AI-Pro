@@ -13,6 +13,7 @@ import { isZaloStorageRequest, isSafeExternalWebUrl, isWorkspaceUrl } from '../s
 import { diagnostic } from './diagnostics'
 import { zaloDiagnosticHost, zaloNetworkDiagnostic, zaloBlockedNavigationDiagnostic } from './zalo-diagnostic'
 import {unreadFromTitle} from '../shared/workspace-unread'
+import type {UnreadCounts,UnreadValue} from '../shared/workspace-unread'
 import {restoreWindow,saveWindow} from './window-state'
 import { canShowWorkspaceNotification, isNotificationOrigin, type WorkspaceService } from './notification-policy'
 import { hasCloudConsentForTask } from './cloud-consent'
@@ -165,7 +166,16 @@ app.whenReady().then(async () => {
     tray.on('double-click',()=>{window.restore();window.show();window.focus()})
   }catch{tray=undefined}
   ipcMain.handle('window:tray',event=>{trusted(event);if(!tray)throw new Error('Chưa tạo được biểu tượng khay hệ thống.');window.hide();return true})
-  const unreadCounts={whatsapp:0,teams:0,zalo:0}
+  const unreadCounts:UnreadCounts={whatsapp:0,teams:0,zalo:0}
+  const domUnread=new Map<string,UnreadValue>()
+  ipcMain.on('workspace:unread-dom',(event,count:unknown)=>{
+    const service=[...views.entries()].find(([,child])=>child.webContents===event.sender)?.[0] as keyof typeof sites|undefined
+    if(!service||event.senderFrame!==event.sender.mainFrame||!isWorkspaceUrl(service,event.sender.getURL()))return
+    if(count!==null&&count!=='dot'&&(typeof count!=='number'||!Number.isInteger(count)||count<0||count>999999))return
+    if(count===null)domUnread.delete(service);else domUnread.set(service,count as UnreadValue)
+    const next=count===null?unreadFromTitle(event.sender.getTitle()):count as UnreadValue
+    if(unreadCounts[service]!==next){unreadCounts[service]=next;void diagnostic('workspace-unread',{host:service,code:`dom:${next}`});if(!window.isDestroyed())window.webContents.send('workspace:unread-changed',{...unreadCounts})}
+  })
   ipcMain.handle('workspace:unread',event=>{trusted(event);return {...unreadCounts}})
   let meetingSession:{token:string;contents:Electron.WebContents;model:string;cloud:boolean}|null=null
   const stopMeeting=()=>{meetingSession=null;for(const [id,controller] of aiRequests)if(id.startsWith('meeting-')){controller.abort();aiRequests.delete(id)}}
@@ -242,11 +252,14 @@ app.whenReady().then(async () => {
       await serviceSession.clearCache()
     }
     views.clear()
+    domUnread.clear();unreadCounts.whatsapp=0;unreadCounts.teams=0;unreadCounts.zalo=0
+    window.webContents.send('workspace:unread-changed',{...unreadCounts})
     view=undefined
     const chatgptResult=await chatgpt.clearLocalData()
     await learning.clearAll()
     notificationPermissions.whatsapp=false
     notificationPermissions.teams=false
+    notificationPermissions.zalo=false
     workspacePanelWidth=360
     workspacePanelCollapsed=false
     layoutWorkspaceViews()
@@ -437,11 +450,13 @@ app.whenReady().then(async () => {
     view = new WebContentsView({ webPreferences: { preload: join(import.meta.dirname, '../preload/chat-view.cjs'), partition: `persist:linguahub-${service}`, nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false } })
     views.set(service, view)
     const serviceContents=view.webContents
+    serviceContents.on('did-start-navigation',(_event,_url,_inPlace,isMainFrame)=>{if(isMainFrame)domUnread.delete(service)})
     const updateUnread=(title:string)=>{
       if(!isWorkspaceUrl(service,serviceContents.getURL()))return
-      const count=unreadFromTitle(title)
+      const count=domUnread.get(service)??unreadFromTitle(title)
       if(unreadCounts[service]===count)return
       unreadCounts[service]=count
+      void diagnostic('workspace-unread',{host:service,code:`title:${count}`})
       // Native website notifications remain responsible for delivery; do not
       // create a second toast from the unread title counter.
       if(!window.isDestroyed())window.webContents.send('workspace:unread-changed',{...unreadCounts})

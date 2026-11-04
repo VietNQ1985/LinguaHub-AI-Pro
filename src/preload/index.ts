@@ -2,8 +2,8 @@ import { contextBridge, ipcRenderer } from 'electron'
 contextBridge.exposeInMainWorld('lingua', {
   hideToTray:()=>ipcRenderer.invoke('window:tray'),
   getWorkspaceUnread:()=>ipcRenderer.invoke('workspace:unread'),
-  onWorkspaceUnread:(callback:(counts:{whatsapp:number;teams:number;zalo:number})=>void)=>{
-    const listener=(_event:Electron.IpcRendererEvent,counts:{whatsapp:number;teams:number;zalo:number})=>callback(counts)
+  onWorkspaceUnread:(callback:(counts:import('../shared/workspace-unread').UnreadCounts)=>void)=>{
+    const listener=(_event:Electron.IpcRendererEvent,counts:import('../shared/workspace-unread').UnreadCounts)=>callback(counts)
     ipcRenderer.on('workspace:unread-changed',listener)
     return ()=>ipcRenderer.removeListener('workspace:unread-changed',listener)
   },
