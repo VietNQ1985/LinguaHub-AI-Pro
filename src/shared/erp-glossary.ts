@@ -1,4 +1,11 @@
 export const ERP_GLOSSARY = [
+  ['D365 F&O', 'D365 F&O'],
+  ['Business Central', 'Business Central'],
+  ['WMS', 'WMS'],
+  ['accounts payable', 'kế toán phải trả'],
+  ['accounts receivable', 'kế toán phải thu'],
+  ['payment', 'thanh toán'],
+  ['budget', 'ngân sách'],
   ['Microsoft Dynamics 365', 'Microsoft Dynamics 365'],
   ['financial dimensions', 'chiều tài chính'],
   ['general ledger', 'sổ cái'],

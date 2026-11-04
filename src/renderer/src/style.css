@@ -70,6 +70,8 @@ h2, h3, h4 { color: var(--text); }
 }
 .workspace-tab:hover { color: var(--text); background: var(--soft); }
 .workspace-tab.active { color: var(--accent); border-bottom-color: var(--accent); background: var(--soft); }
+.workspace-unread {display:inline-flex;align-items:center;justify-content:center;min-width:19px;height:19px;margin-left:6px;padding:0 5px;border-radius:10px;background:#dc2626;color:white;font-size:11px;font-weight:700;vertical-align:middle}
+.workspace-unread-dot {min-width:9px;width:9px;height:9px;padding:0}
 .topbar-actions { display: flex; align-items: center; gap: 7px; margin-left: auto; min-width: 0; }
 .connection-status {
   display: block; max-width: 215px; white-space: nowrap; overflow: hidden;
@@ -193,3 +195,13 @@ h2, h3, h4 { color: var(--text); }
 .speech-controls label { font-size:12px; display:flex; gap:4px; align-items:center; }
 .speech-controls input { width:80px; }
 .speech-controls small { flex-basis:100%; }
+
+.meeting-panel {padding:12px;}
+.meeting-modes {display:flex;gap:6px;padding:8px 12px;}
+.meeting-transcript {max-height:65vh;overflow:auto;display:flex;flex-direction:column;gap:8px;}
+.meeting-panel button {margin:4px;padding:8px;}
+
+.meeting-modes button {flex:1;padding:10px 8px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);cursor:pointer;}
+.meeting-modes button[aria-pressed="true"] {background:var(--accent);color:white;border-color:var(--accent);font-weight:600;}
+.meeting-modes button:disabled {opacity:.5;cursor:default;}
+.meeting-hint {margin:8px 12px;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--muted);}

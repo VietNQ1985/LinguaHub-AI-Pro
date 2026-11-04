@@ -1,9 +1,23 @@
 import { contextBridge, ipcRenderer } from 'electron'
+const shortcutListeners=new Set<(action:string)=>void>()
+const queuedShortcuts:string[]=[]
+ipcRenderer.on('app:shortcut',(_event,action:string)=>{
+  if(shortcutListeners.size){for(const listener of shortcutListeners)listener(action);return}
+  queuedShortcuts.push(action)
+  if(queuedShortcuts.length>10)queuedShortcuts.shift()
+})
 contextBridge.exposeInMainWorld('lingua', {
+  hideToTray:()=>ipcRenderer.invoke('window:tray'),
+  getWorkspaceUnread:()=>ipcRenderer.invoke('workspace:unread'),
+  onWorkspaceUnread:(callback:(counts:import('../shared/workspace-unread').UnreadCounts)=>void)=>{
+    const listener=(_event:Electron.IpcRendererEvent,counts:import('../shared/workspace-unread').UnreadCounts)=>callback(counts)
+    ipcRenderer.on('workspace:unread-changed',listener)
+    return ()=>ipcRenderer.removeListener('workspace:unread-changed',listener)
+  },
   onShortcut: (callback:(action:string)=>void) => {
-    const listener=(_event:Electron.IpcRendererEvent,action:string)=>callback(action)
-    ipcRenderer.on('app:shortcut',listener)
-    return ()=>ipcRenderer.removeListener('app:shortcut',listener)
+    shortcutListeners.add(callback)
+    for(const action of queuedShortcuts.splice(0))callback(action)
+    return ()=>shortcutListeners.delete(callback)
   },
   reloadWorkspace: () => ipcRenderer.invoke('workspace:reload'),
   setWorkspacePanelLayout: (panelWidth:number,collapsed:boolean,persist=false) => ipcRenderer.send('workspace:panel-layout',{panelWidth,collapsed,persist}),
@@ -42,6 +56,10 @@ contextBridge.exposeInMainWorld('lingua', {
     ipcRenderer.on('chat:visible-changed',listener)
     return ()=>ipcRenderer.removeListener('chat:visible-changed',listener)
   },
+  startMeeting: (model:string)=>ipcRenderer.invoke('meeting:start',model),
+  readMeeting: (token:string)=>ipcRenderer.invoke('meeting:read',token),
+  stopMeeting: (token:string)=>ipcRenderer.invoke('meeting:stop',token),
+  translateMeeting: (token:string,text:string,id:string)=>ipcRenderer.invoke('meeting:translate',token,text,id),
   listModels: () => ipcRenderer.invoke('ai:models'),
   writeClipboardText: (text:string) => ipcRenderer.invoke('clipboard:write-text',text),
   runAi: (task: string, text: string, model: string, requestId?: string, options?: {replyFast:boolean}) => ipcRenderer.invoke('ai:run', task, text, model, requestId, options),
@@ -53,8 +71,8 @@ contextBridge.exposeInMainWorld('lingua', {
   cancelAi: (requestId: string) => ipcRenderer.invoke('ai:cancel', requestId),
   testNotification: () => ipcRenderer.invoke('notifications:test'),
   getNotificationPreferences: () => ipcRenderer.invoke('notifications:get'),
-  setNotificationPreference: (service: 'whatsapp' | 'teams', enabled: boolean) => ipcRenderer.invoke('notifications:set', service, enabled),
-  openWorkspace: (service: 'whatsapp' | 'teams') => ipcRenderer.invoke('workspace:open', service),
+  setNotificationPreference: (service: 'whatsapp' | 'teams' | 'zalo', enabled: boolean) => ipcRenderer.invoke('notifications:set', service, enabled),
+  openWorkspace: (service: 'whatsapp' | 'teams' | 'zalo') => ipcRenderer.invoke('workspace:open', service),
   showDashboard: () => ipcRenderer.invoke('workspace:dashboard'),
-  openExternal: (service: 'whatsapp' | 'teams') => ipcRenderer.invoke('workspace:external', service),
+  openExternal: (service: 'whatsapp' | 'teams' | 'zalo') => ipcRenderer.invoke('workspace:external', service),
 })

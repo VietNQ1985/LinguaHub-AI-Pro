@@ -1,9 +1,11 @@
 import { app } from 'electron'
 import { appendFile, mkdir, rename, stat, readdir, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
-type DiagnosticEvent='startup-failed'|'renderer-gone'|'workspace-load-failed'|'application-ready'|'notification-shortcut-ready'|'notification-shortcut-failed'
+type DiagnosticEvent='startup-failed'|'renderer-gone'|'workspace-load-failed'|'application-ready'|'notification-shortcut-ready'|'notification-shortcut-failed'|'zalo-network-failed'|'zalo-navigation-blocked'|'zalo-loaded'|'zalo-renderer-gone'|'workspace-unread'
 let queue=Promise.resolve()
-export function diagnostic(event:DiagnosticEvent){
+export function diagnostic(event:DiagnosticEvent, metadata?:{host:string;code?:string;status?:number}){
+  // Callers provide sanitized host/codes only; no raw page errors or URLs.
+  const suffix=metadata?` ${JSON.stringify(metadata)}`:''
   queue=queue.catch(()=>{}).then(async()=>{
     const directory=join(app.getPath('userData'),'logs')
     await mkdir(directory,{recursive:true})
@@ -13,7 +15,7 @@ export function diagnostic(event:DiagnosticEvent){
     const path=join(directory,'application.log')
     try{if((await stat(path)).size>262144)await rename(path,join(directory,`previous-${Date.now()}.log`))}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error}
     // Fixed event codes only: no URLs, error messages, text, account IDs or tokens.
-    await appendFile(path,`${new Date().toISOString()} ${event}\n`,'utf8')
+    await appendFile(path,`${new Date().toISOString()} ${event}${suffix}\n`,'utf8')
   })
   return queue.catch(()=>{})
 }

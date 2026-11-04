@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 
 export function AdvancedSettings() {
-  const [notifications, setNotifications] = useState({ whatsapp: false, teams: false })
+  const [notifications, setNotifications] = useState({ whatsapp: false, teams: false, zalo:false })
   const [retention, setRetention] = useState(0)
   const [status, setStatus] = useState('')
   const [busy, setBusy] = useState(false)
@@ -11,7 +11,7 @@ export function AdvancedSettings() {
     void window.lingua.getDataRetentionDays().then(setRetention).catch(() => setStatus('Chưa đọc được thời hạn lưu dữ liệu.'))
   }, [])
 
-  const updateNotification = async (service: 'whatsapp' | 'teams', enabled: boolean) => {
+  const updateNotification = async (service: 'whatsapp' | 'teams' | 'zalo', enabled: boolean) => {
     try {
       setNotifications(await window.lingua.setNotificationPreference(service, enabled))
       setStatus('Đã cập nhật quyền thông báo.')
@@ -37,9 +37,10 @@ export function AdvancedSettings() {
 
   return <div className="advanced-settings-content">
     <h4>Thông báo tin nhắn</h4>
-    <p className="helper-text">Anh cần bật thông báo trong WhatsApp hoặc Teams để nhận tin từ website. Việc cấp quyền ở đây chưa đảm bảo website sẽ gửi thông báo.</p>
+    <p className="helper-text">Thông báo Windows chỉ hiện “LinguaHub AI Pro – Có thông báo mới”, không hiện tên người gửi hay nội dung. Khi bấm, ứng dụng sẽ mở đúng tab có thông báo. LinguaHub chặn thông báo chứa nội dung do website tạo.</p>
     <label className="checkbox-label"><input type="checkbox" checked={notifications.whatsapp} onChange={event => void updateNotification('whatsapp', event.target.checked)} /> Cho phép thông báo WhatsApp</label>
     <label className="checkbox-label"><input type="checkbox" checked={notifications.teams} onChange={event => void updateNotification('teams', event.target.checked)} /> Cho phép thông báo Teams</label>
+    <label className="checkbox-label"><input type="checkbox" checked={notifications.zalo} onChange={event => void updateNotification('zalo', event.target.checked)} /> Cho phép thông báo Zalo Web</label>
     <button type="button" onClick={() => void window.lingua.testNotification().then(() => setStatus('Windows đã nhận yêu cầu thông báo thử.')).catch(() => setStatus('Không hiển thị được thông báo thử.'))}>Thử thông báo Windows</button>
 
     <h4>Thời hạn giữ dữ liệu học</h4>
