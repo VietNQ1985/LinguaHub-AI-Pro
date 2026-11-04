@@ -9,6 +9,14 @@
 - Thay hội thoại làm vô hiệu bản xem trước có ngữ cảnh cũ; nút sao chép bị khóa cho đến khi tạo bản mới theo hội thoại đang mở.
 - Zalo Web: đăng nhập và thông báo chưa đọc vẫn được hỗ trợ; chưa có adapter đọc nội dung chat. Composer trên Zalo chỉ dịch câu riêng, không gửi ngữ cảnh hội thoại đến AI.
 
+## Bảo vệ bản dịch trước khi sao chép (review bổ sung)
+
+- Sau khi sửa câu tiếng Việt, bản tiếng Anh cũ chỉ còn để tham khảo và nút sao chép bị vô hiệu hóa; phải dịch lại.
+- Nếu đổi giọng điệu, mô hình AI hoặc nền tảng chat, bản xem trước cũng phải được tạo lại.
+- Chỉnh sửa câu tiếng Anh thủ công vẫn được cho phép, miễn là bản nháp tiếng Việt/ngữ cảnh/cấu hình liên quan không đổi.
+- Khi AI đang chạy, nút sao chép bị khóa để tránh sử dụng bản chưa hoàn tất.
+- Những bảo vệ này **không tương đương xác minh người nhận và gửi tin trực tiếp**. Chưa bật chức năng gửi nếu không có adapter có thể kiểm chứng.
+
 ## Gửi tin và giới hạn nền tảng
 
 | Nền tảng | Mở/đăng nhập | Đọc và dịch chat | Chèn vào ô soạn | Gửi trực tiếp và xác minh |
