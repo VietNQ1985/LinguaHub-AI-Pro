@@ -305,7 +305,7 @@ export function AiPanel() {
   })
   const previewMatchesDraft=previewSource.trim()===replyDraft.trim()
   const previewContextIsCurrent=previewConversation===null||(boundConversation!==null&&previewConversation===boundConversation)
-  const canCopyPreview=Boolean(englishPreview.trim()&&previewContextIsCurrent&&(previewMatchesDraft||previewEdited))
+  const canCopyPreview=Boolean(englishPreview.trim()&&previewContextIsCurrent&&previewMatchesDraft&&!busy)
   const copyEnglishPreview=async()=>{
     if(!canCopyPreview)return
     try{await window.lingua.writeClipboardText(englishPreview);setComposerStatus('Đã sao chép. Anh dán vào ô chat, kiểm tra người nhận rồi tự gửi.')}
@@ -367,9 +367,9 @@ export function AiPanel() {
         {voiceHelp&&<p className="helper-text">Win+H là tính năng đọc chính tả của Windows, không phải microphone tích hợp. LinguaHub không thu hoặc lưu âm thanh.</p>}
         <button type="button" className="primary-button composer-translate" disabled={!model||busy||replyDraft.trim().length<2} onClick={()=>void translateReplyDraft()}>{busy?'Đang dịch…':englishPreview?'Dịch lại bản tiếng Anh':'Dịch theo ngữ cảnh'}</button>
         <label htmlFor="reply-composer-english">Bản tiếng Anh xem trước · có thể chỉnh sửa</label>
-        <textarea id="reply-composer-english" value={englishPreview} maxLength={4000} onChange={event=>{setEnglishPreview(event.target.value);setPreviewEdited(true);setComposerStatus('Đang giữ nguyên bản tiếng Anh anh sửa; chỉ dịch lại khi anh bấm nút phía trên.')}} placeholder="Bản tiếng Anh sẽ hiện ở đây…" />
-        {englishPreview&&!previewMatchesDraft&&!previewEdited&&<p className="composer-warning">Bản xem trước thuộc câu tiếng Việt trước đó. Hãy dịch lại trước khi sao chép.</p>}
-        {englishPreview&&!previewMatchesDraft&&previewEdited&&<p className="composer-warning">Bản tiếng Anh đã sửa thủ công được giữ nguyên dù câu tiếng Việt thay đổi.</p>}
+        <textarea id="reply-composer-english" value={englishPreview} maxLength={4000} onChange={event=>{setEnglishPreview(event.target.value);setPreviewEdited(true);setComposerStatus('Đã lưu chỉnh sửa tiếng Anh. Nếu thay đổi câu tiếng Việt, anh cần dịch lại trước khi sao chép.')}} placeholder="Bản tiếng Anh sẽ hiện ở đây…" />
+        {englishPreview&&!previewMatchesDraft&&<p className="composer-warning">Câu tiếng Việt đã thay đổi. Bản tiếng Anh cũ chỉ để tham khảo; hãy dịch lại trước khi sao chép.</p>}
+        {englishPreview&&previewEdited&&previewMatchesDraft&&<p className="helper-text">Bản tiếng Anh đã chỉnh sửa thủ công và sẵn sàng sao chép sau khi kiểm tra nội dung.</p>}
         {englishPreview&&!previewContextIsCurrent&&<p className="composer-warning">Cuộc trò chuyện đã đổi. Bản cũ chỉ để tham khảo; hãy dịch lại trước khi sao chép.</p>}
         <div className="composer-actions">
           <button type="button" className="secondary-button" disabled={!canCopyPreview} onClick={()=>void copyEnglishPreview()}>Sao chép để gửi trong chat</button>
