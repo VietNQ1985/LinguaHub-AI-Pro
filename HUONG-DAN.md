@@ -114,3 +114,10 @@ Gồm từ vựng rút ra từ các cuộc chat, lịch ôn, bài học trong ng
 - Xóa dữ liệu cục bộ cũng xóa toàn bộ công việc. Hoàn thành công việc sẽ bỏ nhắc. Đổi giờ nhắc cho phép nhắc lại; giữ nguyên giờ thì không lặp.
 
 Kiểm tra tự động: frontend 79 test đạt; typecheck/build đạt. Kiểm tra Rust và đóng gói được ghi trong báo cáo thực hiện. Chưa xác minh đầy đủ DOM Outlook, icon khay và Windows toast trên các phiên chat đăng nhập thật.
+
+
+## 0.2.2: Tab Công việc riêng
+
+Mở chat/email → bật quyền đọc → chọn tab **Công việc**. Nguồn có ghi giờ lấy; bấm **Tìm việc trong chat/email**, rồi **Thêm** hoặc **Bỏ** từng đề xuất. Dùng ô thêm nhanh cho việc tự nhập. Chọn việc để sửa ghi chú, checklist, hạn xử lý và giờ nhắc. Các bộ lọc nằm bên trái, việc đã hoàn thành ở Đã xong. Quay lại chat/email rồi mở lại Công việc nếu muốn lấy nội dung mới.
+
+Outlook kiểm tra quyền riêng khi đổi tab. Nếu chưa đọc được thư, bấm **Bật dịch** để cấp quyền, rồi chọn một thư đang mở trong ngăn đọc.

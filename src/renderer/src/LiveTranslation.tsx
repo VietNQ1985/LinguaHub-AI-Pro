@@ -17,7 +17,7 @@ type ChatSnapshot = { conversationId: string; text: string; messages: Array<{ te
 
 export function LiveTranslation({ model, active=true, service='whatsapp' }: { model: string; active?:boolean; service?:string }) {
   const meetingChat=service==='zoom'||service==='meet'
-  const appName=service==='zoom'?'Zoom':service==='meet'?'Google Meet':service==='teams'?'Teams':service==='zalo'?'Zalo':service==='telegram'?'Telegram':'WhatsApp'
+  const appName=service==='zoom'?'Zoom':service==='meet'?'Google Meet':service==='teams'?'Teams':service==='zalo'?'Zalo':service==='telegram'?'Telegram':service==='outlook'?'Outlook':'WhatsApp'
   const [enabled, setEnabled] = useState(false)
   const defaultAttempted=useRef(false)
   useEffect(()=>{
@@ -25,11 +25,11 @@ export function LiveTranslation({ model, active=true, service='whatsapp' }: { mo
     defaultAttempted.current=true
     let cancelled=false
     // Start only from a grant already given (permission list or "remember"); never pop a prompt at launch.
-    const check=()=>void window.lingua.hasVisibleChatReadAuthorization().then(allowed=>{if(!cancelled&&allowed)setEnabled(true)}).catch(()=>setStatus('Anh bấm Bật dịch để xác nhận quyền đọc tin nhắn.'))
+    const check=()=>void window.lingua.hasVisibleChatReadAuthorization().then(allowed=>{if(!cancelled)setEnabled(allowed)}).catch(()=>setStatus('Anh bấm Bật dịch để xác nhận quyền đọc tin nhắn.'))
     check()
     window.addEventListener('linguahub:permissions',check)
     return()=>{cancelled=true;defaultAttempted.current=false;window.removeEventListener('linguahub:permissions',check)}
-  },[active,model])
+  },[active,model,service])
   const [backgroundCloudAccess, setBackgroundCloudAccess] = useState<{ model: string; allowed: boolean } | null>(null)
   const [status, setStatus] = useState('Đang tắt đọc tin nhắn')
   const [messages, setMessages] = useState<VisibleMessage[]>([])
@@ -364,7 +364,7 @@ export function LiveTranslation({ model, active=true, service='whatsapp' }: { mo
         if (nextConfirmDelay !== Number.POSITIVE_INFINITY) scheduleScan(Math.max(0, nextConfirmDelay), { source: 'confirmation' })
         if (changed) lastScanCompletedAt = capturedAt
       } catch (error) {
-        if (!cancelled) setStatus(getChatReadFailureMessage(error))
+        if (!cancelled) { setStatus(getChatReadFailureMessage(error)); if (/chưa cho phép|cấp quyền đọc|bật dịch/i.test(String(error))) setEnabled(false) }
       } finally {
         scanning = false
         if (cancelled) return
@@ -549,8 +549,9 @@ function sourceByIdHasItem(sourceById: Map<string, VisibleMessage>, item: Visibl
 
 function getChatReadFailureMessage(error: unknown) {
   const message = error instanceof Error ? error.message : typeof error === 'string' ? error : ''
-  if (/not authorized|chưa cho phép/i.test(message)) return 'Anh cần bật quyền đọc chữ tin nhắn hiển thị trước.'
-  return 'Chưa đọc được tin nhắn từ trang chat. Anh thử lại hoặc tải lại trang.'
+  if (/not authorized|chưa cho phép|cấp quyền đọc|bật dịch/i.test(message)) return 'Anh cần bật quyền đọc chữ tin nhắn hiển thị trước.'
+  if (/Trang không phản hồi/.test(message)) return 'Trang đang bận. Chờ một chút rồi bấm Thử lại.'
+  return 'Chưa đọc được nội dung. ' + maskSensitive(message).slice(0,160)
 }
 
 function getTranslationFailureMessage(error: unknown) {

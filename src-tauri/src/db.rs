@@ -489,6 +489,17 @@ impl Store {
         let title = data["title"].as_str().unwrap_or("").trim().to_owned();
         if title.is_empty() || title.chars().count() > 200 || data.to_string().len() > 20000 { anyhow::bail!("Nội dung công việc không hợp lệ."); }
         if !matches!(data["status"].as_str(), Some("todo" | "doing" | "done")) { anyhow::bail!("Trạng thái không hợp lệ."); }
+        if let Some(due) = data.get("dueAt").filter(|v| !v.is_null()) {
+            if due.as_i64().filter(|v| *v > 0).is_none() { anyhow::bail!("Hạn xử lý không hợp lệ."); }
+        }
+        if let Some(steps) = data.get("steps") {
+            let steps = steps.as_array().filter(|s| s.len() <= 30).ok_or_else(|| anyhow::anyhow!("Danh sách bước không hợp lệ."))?;
+            for step in steps {
+                if step["text"].as_str().map(|s| s.trim().is_empty() || s.chars().count() > 200).unwrap_or(true) || !step["done"].is_boolean() {
+                    anyhow::bail!("Bước thực hiện không hợp lệ.");
+                }
+            }
+        }
         let id = match data["id"].as_str() { Some(id) => { uuid::Uuid::parse_str(id)?; id.to_owned() }, None => uuid::Uuid::new_v4().to_string() };
         let remind = if data["remindAt"].is_null() { None } else { Some(data["remindAt"].as_i64().filter(|v| *v > 0).ok_or_else(|| anyhow::anyhow!("Giờ nhắc không hợp lệ."))?) };
         data["id"] = json!(id); data["title"] = json!(title); data["updatedAt"] = json!(now_ms());

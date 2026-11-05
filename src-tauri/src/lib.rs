@@ -156,6 +156,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::tasks_workspace,
             commands::tasks_list,
             commands::tasks_save,
             commands::tasks_delete,

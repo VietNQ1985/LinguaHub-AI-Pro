@@ -57,3 +57,19 @@ test('default translation respects denied or obsolete read permission',async()=>
   expect(read).not.toHaveBeenCalled();expect(runAi).not.toHaveBeenCalled()
  }finally{await act(async()=>root.unmount());dom.window.close()}
 })
+
+test('switching to Outlook rechecks mail permission and shows Enable instead of stale active state',async()=>{
+ const dom=new JSDOM('<div id="root"></div>');vi.stubGlobal('window',dom.window);vi.stubGlobal('document',dom.window.document);vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT',true)
+ const status=vi.fn().mockResolvedValueOnce(true).mockResolvedValue(false),ai=vi.fn()
+ Object.assign(dom.window,{lingua:{hasVisibleChatReadAuthorization:status,readVisibleChat:async()=>({conversationId:'empty',text:'',messages:[]}),onVisibleChatChanged:()=>()=>{},cancelAi:async()=>true,stopVisibleChatRead:async()=>{},runAi:ai}})
+ const container=dom.window.document.querySelector('#root')!,root=createRoot(container)
+ try{
+  await act(async()=>root.render(createElement(LiveTranslation,{model:'local',service:'whatsapp'})))
+  expect(container.textContent).toContain('Đang dịch tự động')
+  await act(async()=>root.render(createElement(LiveTranslation,{model:'local',service:'outlook'})))
+  expect(status).toHaveBeenCalledTimes(2)
+  expect(container.textContent).toContain('Bật dịch')
+  expect(container.textContent).toContain('Dịch tự động đang tắt')
+  expect(ai).not.toHaveBeenCalled()
+ }finally{await act(async()=>root.unmount());dom.window.close()}
+})

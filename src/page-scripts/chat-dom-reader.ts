@@ -10,21 +10,26 @@ export function buildVisibleChatReadScript(service: ChatService) {
 function readVisibleChatPage(service: ChatService): ChatDomSnapshot {
   if (service === 'outlook') {
     const visible = (node: Element) => {
-      const r = node.getBoundingClientRect(), style = getComputedStyle(node)
-      return r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight && style.display !== 'none' && style.visibility !== 'hidden'
+      const rect=node.getBoundingClientRect(),style=node.ownerDocument.defaultView!.getComputedStyle(node)
+      if(node.closest('[hidden], [aria-hidden="true"], [contenteditable="true"], [role="textbox"], [role="listbox"], #MailList'))return false
+      return rect.width>0&&rect.height>0&&rect.bottom>0&&rect.top<(node.ownerDocument.defaultView!.innerHeight||innerHeight)&&style.display!=='none'&&style.visibility!=='hidden'
     }
-    // Read only the open message body; never the inbox, editor, or hidden mail.
-    const bodies = Array.from(document.querySelectorAll('[role="document"], [data-testid="message-body"], .allowTextSelection'))
-      .filter(node => visible(node) && !node.closest('[contenteditable="true"], [role="textbox"]'))
-    const unique = bodies.filter(node => !bodies.some(other => other !== node && other.contains(node)))
-    const body = unique.slice(-1).map(node => ((node as HTMLElement).innerText || node.textContent || '').trim()).join('')
-    const messages: ChatDomMessage[] = []
-    for(let offset=0; offset<body.length; offset+=3500) messages.push({text:body.slice(offset,offset+3500),side:'left'})
-    const title = Array.from(document.querySelectorAll('[role="heading"], h1, h2')).filter(visible).map(node => ((node as HTMLElement).innerText || node.textContent || '').trim()).filter(Boolean).pop() || ''
-    // Include body identity when Outlook does not expose a stable mail id.
-    return { conversationHint: location.href + ':' + title + ':' + (messages[0]?.text.slice(0, 100) || ''), messages }
+    const reading=document.querySelector('main[aria-label], [role="main"] [id*="ReadingPane"], #ReadingPaneContainerId, #ReadingPane')
+    const scope=reading||document
+    // Outlook exposes expanded messages as UniqueMessageBody_*; this also avoids signature/list previews.
+    const selectors=['[id^="UniqueMessageBody"]','[data-testid="message-body"]','[role="document"][aria-label]','[role="document"]','.allowTextSelection']
+    let bodies:Element[]=[]
+    for(const selector of selectors){bodies=Array.from(scope.querySelectorAll(selector)).filter(visible);if(bodies.length)break}
+    bodies=bodies.filter(node=>!bodies.some(other=>other!==node&&other.contains(node)))
+    // Read only expanded message bodies, retaining paragraphs and list markers.
+    const messages:ChatDomMessage[]=[]
+    for(const node of bodies.slice(-10)){
+      const body=((node as HTMLElement).innerText||node.textContent||'').trim()
+      for(let offset=0;offset<body.length;offset+=3500)messages.push({text:body.slice(offset,offset+3500),side:'left',id:(node.id||'mail')+':'+offset})
+    }
+    const title=Array.from(scope.querySelectorAll('[role="heading"], h1, h2')).filter(visible).map(node=>(node as HTMLElement).innerText||node.textContent||'').find(Boolean)||''
+    return {conversationHint:location.pathname+':'+title.slice(0,150)+':'+(messages[0]?.text.slice(0,100)||''),messages}
   }
-
   const visibleWithin = (element: Element, clip?: DOMRect) => {
     const rect = element.getBoundingClientRect()
     const style = window.getComputedStyle(element)

@@ -27,6 +27,7 @@ pub struct CaptionSession {
 pub struct Inner {
     /// "whatsapp" | "teams" | "zalo" | "zoom" | "meet" | "dashboard"
     pub current: String,
+    pub tasks_open: bool,
     /// Service webviews that exist (label "svc-<service>").
     pub views: HashSet<String>,
     pub panel_width: f64,
@@ -77,6 +78,7 @@ impl AppState {
         let preferences = store.preferences();
         let inner = Inner {
             current: "whatsapp".into(),
+            tasks_open: false,
             views: HashSet::new(),
             panel_width: preferences["panelWidth"].as_f64().unwrap_or(360.0),
             panel_collapsed: false,

@@ -1,4 +1,3 @@
-import { WorkTasks } from './WorkTasks'
 import { MeetingTranslation } from './MeetingTranslation'
 import { ExternalProviders } from './ExternalProviders'
 import { WhisperTranslation } from './WhisperTranslation'
@@ -52,7 +51,7 @@ function modelLabel(value: string) {
   return value ? 'Ollama · ' + value : 'Chưa chọn mô hình'
 }
 
-export function AiPanel() {
+export function AiPanel({workspaceActive=true}:{workspaceActive?:boolean}) {
   const [service,setService]=useState('whatsapp')
   // Zoom and Google Meet support meeting-caption translation only, not chat-message translation.
   const meetingCapable=service==='teams'||service==='zoom'||service==='meet'
@@ -378,7 +377,7 @@ export function AiPanel() {
     </div>
 
     <div className="assistant-content">
-      {mode==='translate'&&<WorkTasks service={service} model={model}/>}
+      {mode==='translate'&&<button type="button" className="task-capture-link" onClick={()=>window.dispatchEvent(new Event('linguahub:open-tasks'))}>＋ Lấy công việc từ {service==='outlook'?'email này':'chat này'}</button>}
       {/* Permissions live in Settings only; features still ask when a permission is needed. */}
       {service==='zalo'&&<ZaloCallBar />}
       <div className="meeting-modes" role="group" aria-label="Chế độ dịch"><button type="button" aria-pressed={!meetingMode&&!captionsMode} onClick={()=>{invalidateReply();setMeetingMode(false);setCaptionsMode(false)}} title="Dịch tin nhắn đang hiển thị">{service==='outlook'?'Email':'Tin nhắn'}</button><button type="button" disabled={!meetingCapable} aria-pressed={meetingMode&&!captionsMode} onClick={()=>{invalidateReply();setMeetingMode(true);setCaptionsMode(false)}} title="Dịch phụ đề có sẵn của Teams/Zoom/Meet">Cuộc họp</button><button type="button" aria-pressed={captionsMode} onClick={()=>{invalidateReply();setCaptionsMode(true)}} title="Nghe âm thanh trên máy và tạo phụ đề bằng Whisper">Phụ đề</button></div>
@@ -391,7 +390,7 @@ export function AiPanel() {
       {/* During a meeting the chat translation and reply suggestions stay below the spoken translation, so both run at once. */}
       <div style={{ display: mode === 'translate' && chatCapable ? 'block' : 'none' }} aria-hidden={mode !== 'translate'}>
         {(meetingMode||captionsMode)&&<h3 className="meeting-chat-title">Chat trong cuộc họp</h3>}
-        <LiveTranslation model={model} service={service} active={chatCapable} />
+        <LiveTranslation model={model} service={service} active={chatCapable&&workspaceActive} />
       </div>
 
       {/* One reply box: the Vietnamese text is either translated as written or used as the intent for 3 suggestions. */}

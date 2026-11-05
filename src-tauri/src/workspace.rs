@@ -87,7 +87,7 @@ pub fn layout<R: Runtime>(app: &AppHandle<R>) {
         let Some(webview) = app.get_webview(&label) else { continue };
         let _ = webview.set_position(LogicalPosition::new(0.0, HEADER));
         let _ = webview.set_size(LogicalSize::new((width - panel - divider).max(300.0), (height - HEADER).max(100.0)));
-        let visible = label == view_label(&current);
+        let visible = label == view_label(&current) && !state.lock().tasks_open;
         if visible && !dialog_open {
             let _ = webview.show();
         } else {
@@ -143,7 +143,7 @@ pub fn conversation_id(service: &str, url: &str, snapshot: &Value) -> String {
 pub async fn read_visible<R: Runtime>(app: &AppHandle<R>) -> anyhow::Result<Value> {
     let Some((service, webview)) = current_view(app) else { return Ok(Value::Null) };
     // Read only the visible, authorized workspace.
-    if !window_visible(app) {
+    if !window_visible(app) || app.state::<AppState>().lock().tasks_open {
         return Ok(Value::Null);
     }
     let url = webview.url()?.to_string();
@@ -275,6 +275,7 @@ pub async fn open<R: Runtime>(app: &AppHandle<R>, service: &str) -> anyhow::Resu
         let mut inner = state.lock();
         inner.workspace_request += 1;
         inner.current = service.to_owned();
+        inner.tasks_open = false;
     }
     if let Some(existing) = view(app, service) {
         layout(app);

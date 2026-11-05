@@ -216,3 +216,9 @@ test('Outlook reads the visible opened mail, excluding inbox, hidden mail and dr
  expect(result.conversationHint).toContain('ERP request')
  dom.window.close()
 })
+
+test('Outlook prioritizes expanded UniqueMessageBody over inbox and misleading document containers',()=>{
+ const {dom,result}=runPageScript(`<main aria-label="Reading pane"><h2>Invoice</h2><div id="UniqueMessageBody_3" role="document">Review ERP invoice.\n- Verify tax.</div><div role="document">Unrelated document</div><div id="UniqueMessageBody_hidden" aria-hidden="true">Hidden history</div></main><div id="MailList"><div role="document">Inbox preview</div></div>`, 'outlook')
+ expect(result.messages.map(m=>m.text).join('')).toBe('Review ERP invoice.\n- Verify tax.')
+ dom.window.close()
+})

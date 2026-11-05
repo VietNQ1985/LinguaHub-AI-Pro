@@ -1,3 +1,4 @@
+import { WorkTasks, type TaskSourceSnapshot } from './WorkTasks'
 import React from 'react'
 import { createRoot } from 'react-dom/client'
 import './style.css'
@@ -15,6 +16,7 @@ type UiService=WorkspaceService
 declare global {
   interface Window {
     lingua: {
+      setTasksWorkspace(open: boolean): Promise<void>
       listTasks(): Promise<import('./WorkTasks').WorkTask[]>
       saveTask(input: import('./WorkTasks').WorkTask): Promise<import('./WorkTasks').WorkTask>
       deleteTask(id: string): Promise<void>
@@ -101,6 +103,9 @@ function App() {
     return()=>{alive=false;stop()}
   },[])
   const badge=(service:'whatsapp'|'teams'|'zalo')=><WorkspaceUnreadBadge value={unread[service]}/>
+  const [tasksOpen,setTasksOpen]=React.useState(false)
+  const [taskSource,setTaskSource]=React.useState<TaskSourceSnapshot|null>(null)
+  const [taskModel,setTaskModel]=React.useState('')
   const [activeService, setActiveService] = React.useState<UiService>('whatsapp')
   const operation=React.useRef(0)
   const [fallbackService, setFallbackService] = React.useState<WorkspaceService | null>(null)
@@ -141,14 +146,16 @@ function App() {
 
   const open = React.useCallback(async (service: WorkspaceService) => {
     const current=++operation.current
+    setTasksOpen(false)
     setActiveService(service)
     setFallbackService(null)
     window.dispatchEvent(new Event('linguahub:workspace'))
-    window.dispatchEvent(new CustomEvent('linguahub:service',{detail:service}))
+
     setStatus(service === 'telegram' ? 'Đang mở Telegram…' : service === 'outlook' ? 'Đang mở Outlook…' : service === 'whatsapp' ? 'Đang mở WhatsApp…' : service==='zalo'?'Đang mở Zalo Web…':service==='zoom'?'Đang mở Zoom…':service==='meet'?'Đang mở Google Meet…':'Đang mở Teams…')
     try {
       await window.lingua.openWorkspace(service)
       if(current!==operation.current)return
+      window.dispatchEvent(new CustomEvent('linguahub:service',{detail:service}))
       setStatus('Đã mở trang trò chuyện')
     } catch {
       if(current!==operation.current)return
@@ -212,6 +219,27 @@ function App() {
     else if (action === 'reload') void reload()
   }), [open, openApp, reload, apps])
 
+  const openTasks=React.useCallback(async()=>{
+    const version=++operation.current
+    try {
+      const preferences=await window.lingua.getPreferences()
+      let snapshot: TaskSourceSnapshot|null=null
+      if(await window.lingua.hasVisibleChatReadAuthorization()){
+        try { const value=await window.lingua.readVisibleChat(); if(value?.text.trim())snapshot={...value,service:activeRef.current,capturedAt:Date.now()} } catch { /* Tasks remain available even when a page is unavailable. */ }
+      }
+      if(version!==operation.current)return
+      await window.lingua.setTasksWorkspace(true)
+      if(version!==operation.current)return
+      setTaskSource(snapshot);setTaskModel(preferences.replyModel||preferences.model);setTasksOpen(true);setStatus('Công việc của tôi')
+    }catch{setStatus('Chưa mở được công việc. Anh thử lại.')}
+  },[])
+  React.useEffect(()=>{
+    const handler=()=>void openTasks()
+    window.addEventListener('linguahub:open-tasks',handler)
+    const stop=window.lingua.onShortcut(action=>{if(action==='tasks')handler()})
+    return()=>{window.removeEventListener('linguahub:open-tasks',handler);stop()}
+  },[openTasks])
+
   const openFallback = async () => {
     if (!fallbackService) return
     try {
@@ -226,7 +254,8 @@ function App() {
     <header className="topbar">
       <div className="topbar-brand"><span className="brand-mark">VI</span><span>LinguaHub <small>AI</small></span></div>
       <nav className="workspace-tabs" aria-label="Chọn ứng dụng trò chuyện">
-        {APP_ITEMS.filter(item => shown(item.id)).map(item => <button key={item.id} type="button" className={activeService === item.id ? 'workspace-tab active' : 'workspace-tab'} aria-current={activeService === item.id ? 'page' : undefined} onClick={() => void openApp(item.id)}><AppLogo app={item.id} size={22} />{item.label}{item.id === 'whatsapp' || item.id === 'teams' || item.id === 'zalo' ? badge(item.id) : null}</button>)}
+        {APP_ITEMS.filter(item => shown(item.id)).map(item => <button key={item.id} type="button" className={!tasksOpen && activeService === item.id ? 'workspace-tab active' : 'workspace-tab'} aria-current={!tasksOpen && activeService === item.id ? 'page' : undefined} onClick={() => void openApp(item.id)}><AppLogo app={item.id} size={22} />{item.label}{item.id === 'whatsapp' || item.id === 'teams' || item.id === 'zalo' ? badge(item.id) : null}</button>)}
+        <button type="button" className={tasksOpen?'workspace-tab active':'workspace-tab'} aria-current={tasksOpen?'page':undefined} onClick={()=>void openTasks()}>☑ Công việc</button>
       </nav>
       <div className="topbar-actions">
         <button type="button" className="icon-button" title="Thu gọn xuống khay hệ thống" aria-label="Thu gọn xuống khay hệ thống" onClick={()=>void window.lingua.hideToTray().catch(()=>setStatus('Chưa thu gọn được xuống khay hệ thống.'))}>▁</button>
@@ -237,14 +266,17 @@ function App() {
       </div>
     </header>
     <div className="workspace-row">
-      <main className="workspace" aria-label="Trang trò chuyện">
+      <main className={tasksOpen?"workspace tasks-workspace":"workspace"} aria-label={tasksOpen?"Công việc":"Trang trò chuyện"}>
+        {tasksOpen&&<WorkTasks service={activeService} model={taskModel} sourceSnapshot={taskSource} onBack={()=>void openApp(activeService)}/>}
+        {!tasksOpen&&<>
         {needsSetup ? <AppsPanel firstRun /> : fallbackService ? <div className="workspace-fallback"><h2>Chưa mở được trang trò chuyện</h2><p>Trang này có thể không hỗ trợ chạy bên trong ứng dụng. Anh có thể mở bằng trình duyệt.</p><button onClick={() => void openFallback()}>Mở bằng trình duyệt</button></div> : <div className="workspace-placeholder">Đang mở trang trò chuyện…</div>}
+        </>}
       </main>
-      {!panelCollapsed && <div className="panel-resizer" role="separator" aria-label="Kéo để điều chỉnh độ rộng bản dịch" aria-orientation="vertical" onPointerDown={event => { resizing.current = true; event.currentTarget.setPointerCapture(event.pointerId) }} onPointerMove={event => { if (resizing.current) updatePanelWidth(event.clientX, false) }} onPointerUp={event => { if (resizing.current) { resizing.current = false; updatePanelWidth(event.clientX, true) } }} onLostPointerCapture={() => { resizing.current = false }} />}
-      <aside className={panelCollapsed ? 'panel panel-collapsed' : 'panel'} style={{width: panelCollapsed ? 56 : panelWidth}} aria-label="Trợ lý dịch tiếng Việt">
+      {!tasksOpen && !panelCollapsed && <div className="panel-resizer" role="separator" aria-label="Kéo để điều chỉnh độ rộng bản dịch" aria-orientation="vertical" onPointerDown={event => { resizing.current = true; event.currentTarget.setPointerCapture(event.pointerId) }} onPointerMove={event => { if (resizing.current) updatePanelWidth(event.clientX, false) }} onPointerUp={event => { if (resizing.current) { resizing.current = false; updatePanelWidth(event.clientX, true) } }} onLostPointerCapture={() => { resizing.current = false }} />}
+      <aside hidden={tasksOpen} className={panelCollapsed ? 'panel panel-collapsed' : 'panel'} style={{width: panelCollapsed ? 56 : panelWidth}} aria-label="Trợ lý dịch tiếng Việt">
         {panelCollapsed && <button className="expand-panel" title="Mở bản dịch" aria-label="Mở bản dịch" onClick={() => setPanelCollapsed(false)}>›</button>}
         <div className={panelCollapsed ? 'panel-body panel-body-hidden' : 'panel-body'} aria-hidden={panelCollapsed}>
-          <AiPanel />
+          <AiPanel workspaceActive={!tasksOpen} />
         </div>
       </aside>
     </div>

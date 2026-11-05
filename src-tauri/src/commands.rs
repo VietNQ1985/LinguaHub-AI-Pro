@@ -1230,3 +1230,11 @@ pub fn tasks_save(webview: Webview, state: State<AppState>, input: Value) -> Res
 pub fn tasks_delete(webview: Webview, state: State<AppState>, id: String) -> Res<()> {
     trusted(&webview)?; state.store.task_delete(&id).map_err(fail)
 }
+
+#[tauri::command]
+pub fn tasks_workspace(webview: Webview, app: AppHandle, state: State<AppState>, open: bool) -> Res<()> {
+    trusted(&webview)?;
+    state.lock().tasks_open = open;
+    workspace::layout(&app);
+    Ok(())
+}
