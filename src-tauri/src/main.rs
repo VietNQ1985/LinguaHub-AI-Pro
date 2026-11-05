@@ -320,6 +320,49 @@ fn mask_sensitive(text: &str) -> String {
     }).into_owned()
 }
 
+
+#[tauri::command]
+async fn read_meeting_captions(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, SharedState>,
+) -> Result<Value, String> {
+    let masking = {
+        let s = lock(&state)?;
+        if !s.read_authorized || s.active_service != "teams" {
+            return Err("open Teams and authorize visible reading first".into());
+        }
+        s.preferences.masking
+    };
+    let view = app.get_webview("chat-teams").ok_or("Teams webview missing")?;
+    let (tx, mut rx) = mpsc::unbounded_channel::<String>();
+    view.eval_with_callback(
+        format!("(()=>{{ {} }})()", include_str!("../scripts/meeting-captions.js")),
+        move |result| { let _ = tx.send(result); },
+    ).map_err(|_| "unable to read meeting captions")?;
+    let raw = tokio::time::timeout(Duration::from_secs(8), rx.recv()).await
+        .map_err(|_| "caption reading timed out".to_owned())?
+        .ok_or("caption data unavailable")?;
+    let parsed: Value = serde_json::from_str(&raw).map_err(|_| "invalid caption data")?;
+    let mut payload: Value = match parsed.as_str() {
+        Some(s) => serde_json::from_str(s).map_err(|_| "invalid caption payload")?,
+        None => parsed,
+    };
+    let segments = payload.get_mut("segments").and_then(Value::as_array_mut)
+        .ok_or("caption segments missing")?;
+    segments.truncate(30);
+    for segment in segments {
+        let text = segment.get("text").and_then(Value::as_str).unwrap_or("");
+        let clipped: String = text.chars().take(2000).collect();
+        if let Some(obj) = segment.as_object_mut() {
+            obj.insert("text".into(), Value::String(if masking {mask_sensitive(&clipped)} else {clipped}));
+        }
+    }
+    if !lock(&state)?.read_authorized {
+        return Err("caption reading was revoked".into());
+    }
+    Ok(payload)
+}
+
 #[tauri::command]
 fn copy_english_preview(
     state: tauri::State<'_, SharedState>,
@@ -458,7 +501,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             get_preferences, set_preferences, set_layout, open_service,
             reload_service, authorize_chat_read, chat_read_authorized,
-            read_visible_chat, copy_english_preview, ollama_models,
+            read_visible_chat, read_meeting_captions, copy_english_preview, ollama_models,
             ollama_ai, app_capabilities,
         ])
         .run(tauri::generate_context!())
