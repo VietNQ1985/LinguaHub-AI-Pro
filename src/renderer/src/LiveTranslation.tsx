@@ -17,7 +17,7 @@ type ChatSnapshot = { conversationId: string; text: string; messages: Array<{ te
 
 export function LiveTranslation({ model, active=true, service='whatsapp' }: { model: string; active?:boolean; service?:string }) {
   const meetingChat=service==='zoom'||service==='meet'
-  const appName=service==='zoom'?'Zoom':service==='meet'?'Google Meet':service==='teams'?'Teams':service==='zalo'?'Zalo':service==='telegram'?'Telegram':'WhatsApp'
+  const appName=service==='zoom'?'Zoom':service==='meet'?'Google Meet':service==='teams'?'Teams':service==='zalo'?'Zalo':service==='telegram'?'Telegram':service==='outlook'?'Outlook':'WhatsApp'
   const [enabled, setEnabled] = useState(false)
   const defaultAttempted=useRef(false)
   useEffect(()=>{
@@ -286,7 +286,7 @@ export function LiveTranslation({ model, active=true, service='whatsapp' }: { mo
           return
         }
         if (!result) {
-          setStatus('Chờ mở WhatsApp, Teams, Zalo, Zoom hoặc Google Meet')
+          setStatus('Chờ mở WhatsApp, Teams, Zalo, Outlook, Zoom hoặc Google Meet')
           return
         }
         if (result.conversationId && conversationId.current && result.conversationId !== conversationId.current) {
@@ -353,7 +353,7 @@ export function LiveTranslation({ model, active=true, service='whatsapp' }: { mo
         lastSnapshotSignature = signature
         latestSnapshot.current = { version: currentVersion, messages: visible }
         commitMessages(visible)
-        if (!visible.length) setStatus('Chưa thấy tin nhắn trong vùng chat đang mở')
+        if (!visible.length) setStatus('Chưa thấy nội dung đang mở để dịch')
         else if (!activeModel) setStatus(model.startsWith('chatgpt:') ? 'Cần cho phép gửi chữ tin nhắn hiển thị đến ChatGPT để tự dịch' : 'Đã đọc tin nhắn. Chọn ChatGPT hoặc kết nối Ollama để tự dịch')
         else {
           if (visible.some(item => item.status === 'confirming')) setStatus('Đang kiểm tra tin mới…')
@@ -484,7 +484,7 @@ export function LiveTranslation({ model, active=true, service='whatsapp' }: { mo
     </div>
 
     {!model && <div className="translation-empty">Anh hãy chọn dịch vụ AI trong <button type="button" className="text-button" onClick={() => window.dispatchEvent(new Event('linguahub:settings'))}>Cài đặt</button> để bắt đầu.</div>}
-    {enabled && messages.length === 0 && <div className="translation-empty">{meetingChat?`Mở khung Chat trong cuộc họp ${appName}. Tin nhắn mới sẽ được dịch ở đây.`:'Mở một cuộc trò chuyện, bản dịch sẽ hiện ở đây.'}</div>}
+    {enabled && messages.length === 0 && <div className="translation-empty">{meetingChat?`Mở khung Chat trong cuộc họp ${appName}. Tin nhắn mới sẽ được dịch ở đây.`:'Mở một cuộc trò chuyện hoặc email Outlook, bản dịch sẽ hiện ở đây.'}</div>}
     {!enabled && <div className="translation-empty">Bấm Bật dịch để dịch tin nhắn đang hiển thị. Chỉ đọc chữ, không chụp màn hình.</div>}
 
     {hasFailures && <button type="button" className="retry-button" onClick={() => { failed.current.clear(); failureMessages.current.clear(); setStatus('Đang thử dịch lại các tin chưa thành công…'); window.dispatchEvent(new Event('linguahub:retry-translation')) }}>↻ Thử dịch lại các tin chưa thành công</button>}
