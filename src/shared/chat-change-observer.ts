@@ -1,6 +1,8 @@
 export const CHAT_CHANGE_DEBOUNCE_MS = 90
 
 const chatRootSelectors = [
+  '[role="document"]',
+  '[data-testid="message-body"]',
   '#main [data-testid="conversation-panel-messages"]',
   '#main [aria-label*="message list" i]',
   '[data-tid="message-pane-list-viewport"]',

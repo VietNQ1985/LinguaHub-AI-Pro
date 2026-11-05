@@ -1,6 +1,6 @@
 {
   "name": "linguahub-tauri",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "LinguaHub on Tauri v2 (Rust + WebView2): messaging workspace with visible chat translation, reply suggestions and English learning.",
   "license": "MIT",

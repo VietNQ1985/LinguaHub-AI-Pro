@@ -18,6 +18,7 @@ function findComposer(service: ChatService, focus: boolean): ComposerState {
     try { if (frame.contentDocument) documents.push(frame.contentDocument) } catch { /* cross-origin frame */ }
   }
   const selectors: Record<ChatService, string[]> = {
+    outlook: [],
     whatsapp: ['#main footer [contenteditable="true"][role="textbox"]', '#main footer [contenteditable="true"]'],
     teams: ['[data-tid="ckeditor"][contenteditable="true"]', '[data-tid="ckeditor"] [contenteditable="true"]', '[role="textbox"][contenteditable="true"][aria-label*="message" i]', '[role="textbox"][contenteditable="true"][aria-label*="tin nhắn" i]'],
     zoom: ['.chat-box__chat-textarea[contenteditable="true"]', '.chat-box__chat-textarea [contenteditable="true"]', 'textarea.chat-box__chat-textarea', '[class*="chat-box"] [contenteditable="true"]', '[class*="chat-box"] textarea'],

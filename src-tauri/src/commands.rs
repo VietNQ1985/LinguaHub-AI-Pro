@@ -404,6 +404,13 @@ pub fn permissions_set(webview: Webview, state: State<AppState>, grants: std::co
 #[tauri::command]
 pub async fn chat_authorize_visible_read(webview: Webview, app: AppHandle, state: State<'_, AppState>) -> Res<bool> {
     trusted(&webview)?;
+    let outlook = state.lock().current == "outlook";
+    if outlook && !state.store.remember("outlook") {
+        let (answer, _) = dialog::ask(&app, Ask::question("Đọc email Outlook", "Cho phép đọc nội dung email Outlook đang mở?", "Chỉ đọc phần thư đang mở để dịch hoặc lấy công việc. Quyền gửi chữ đến AI đám mây được kiểm tra riêng.", ["Hủy", "Cho phép"]).default_button(0)).await;
+        if answer != 1 { return Ok(false); }
+        state.store.set_remember("outlook", true).map_err(fail)?;
+    }
+
     if state.lock().chat_read_authorized {
         return Ok(true);
     }
@@ -411,7 +418,7 @@ pub async fn chat_authorize_visible_read(webview: Webview, app: AppHandle, state
     let authorized = if state.store.remember("chat") {
         true
     } else {
-        let (response, checked) = dialog::ask(&app, Ask::question("Đọc tin nhắn để dịch", "Cho phép LinguaHub đọc tin nhắn đang hiển thị để dịch?", "Chỉ đọc chữ trên màn hình (WhatsApp, Teams, Zalo, chat Zoom/Meet), không chụp màn hình. Ollama xử lý trên máy; dịch vụ cloud cần anh đồng ý riêng.", ["Hủy", "Cho phép"]).default_button(1).checkbox("Ghi nhớ, không hỏi lại", true)).await;
+        let (response, checked) = dialog::ask(&app, Ask::question("Đọc tin nhắn để dịch", "Cho phép LinguaHub đọc tin nhắn đang hiển thị để dịch?", "Chỉ đọc nội dung chat hoặc email Outlook đang mở trên màn hình, không chụp màn hình. Ollama xử lý trên máy; dịch vụ cloud cần anh đồng ý riêng.", ["Hủy", "Cho phép"]).default_button(1).checkbox("Ghi nhớ, không hỏi lại", true)).await;
         if response == 1 && checked {
             let _ = state.store.set_remember("chat", true);
         }
@@ -424,6 +431,7 @@ pub async fn chat_authorize_visible_read(webview: Webview, app: AppHandle, state
 #[tauri::command]
 pub fn chat_visible_read_status(webview: Webview, state: State<AppState>) -> Res<bool> {
     trusted(&webview)?;
+    if state.lock().current == "outlook" && !state.store.remember("outlook") { return Ok(false); }
     let remembered = state.store.remember("chat");
     let mut inner = state.lock();
     if !inner.chat_read_authorized && !inner.chat_read_paused && remembered {
@@ -445,6 +453,7 @@ pub fn chat_stop_visible_read(webview: Webview, state: State<AppState>) -> Res<(
 #[tauri::command]
 pub async fn chat_read_visible(webview: Webview, app: AppHandle, state: State<'_, AppState>) -> Res<Value> {
     trusted(&webview)?;
+    if state.lock().current == "outlook" && !state.store.remember("outlook") { return Err("Anh bật dịch để cấp quyền đọc email Outlook.".into()); }
     if !state.lock().chat_read_authorized {
         return Err("Chưa cho phép đọc chữ chat đang hiển thị.".into());
     }
@@ -1207,4 +1216,17 @@ pub async fn stt_transcribe(webview: Webview, app: AppHandle, purpose: String, l
         .await
         .map_err(fail)?
         .map_err(fail)
+}
+
+#[tauri::command]
+pub fn tasks_list(webview: Webview, state: State<AppState>) -> Res<Vec<Value>> {
+    trusted(&webview)?; state.store.tasks_list().map_err(fail)
+}
+#[tauri::command]
+pub fn tasks_save(webview: Webview, state: State<AppState>, input: Value) -> Res<Value> {
+    trusted(&webview)?; state.store.task_save(input).map_err(fail)
+}
+#[tauri::command]
+pub fn tasks_delete(webview: Webview, state: State<AppState>, id: String) -> Res<()> {
+    trusted(&webview)?; state.store.task_delete(&id).map_err(fail)
 }

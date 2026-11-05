@@ -6,6 +6,7 @@
 		} catch {}
 	};
 	const selectors = {
+		outlook: [],
 		whatsapp: ["#main footer [contenteditable=\"true\"][role=\"textbox\"]", "#main footer [contenteditable=\"true\"]"],
 		teams: [
 			"[data-tid=\"ckeditor\"][contenteditable=\"true\"]",

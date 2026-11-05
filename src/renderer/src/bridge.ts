@@ -39,6 +39,9 @@ window.addEventListener('keydown', event => {
 type Service = 'whatsapp' | 'teams' | 'zalo' | 'zoom' | 'meet'
 
 window.lingua = {
+  listTasks: () => call('tasks_list'),
+  saveTask: input => call('tasks_save', { input }),
+  deleteTask: id => call('tasks_delete', { id }),
   hideToTray: () => call('window_tray'),
   getWorkspaceUnread: () => call<UnreadCounts>('workspace_unread'),
   onWorkspaceUnread: callback => subscribe<UnreadCounts>('workspace-unread', callback),

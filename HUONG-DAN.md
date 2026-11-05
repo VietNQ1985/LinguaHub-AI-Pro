@@ -102,3 +102,15 @@ Gồm từ vựng rút ra từ các cuộc chat, lịch ôn, bài học trong ng
 | App hiện "Tải WhatsApp cho Windows" | LinguaHub đã tự ẩn các quảng cáo tải app; nếu trang đổi giao diện thì báo để cập nhật. |
 | Gọi Zalo không được | Cài và đăng nhập Zalo PC đúng tài khoản; tên liên hệ phải tìm ra duy nhất 1 người. |
 | RAM cao | Bỏ bớt app không dùng trong **Ứng dụng**; app ẩn đã tự chuyển sang chế độ ít bộ nhớ. |
+
+
+## Bổ sung 0.2.1: Outlook, công việc và nhắc hạn
+
+- Outlook: mở email rồi bật dịch. Bộ đọc lấy phần thư đang mở; không đọc danh sách hộp thư hoặc thư nháp. Các đoạn dài được chia để dịch. Cần kiểm tra trên Outlook thực tế vì giao diện Microsoft có thể đổi selector.
+- Khay hệ thống: icon có chấm đỏ khi bất kỳ ứng dụng được theo dõi nào có tin chưa đọc; rê chuột để xem tổng số. Đọc hết thì dấu đỏ biến mất.
+- Trong panel, mở **Công việc & nhắc hạn**. Có thể tạo bằng tay hoặc bấm **Lấy việc từ chat/email**. AI chỉ chạy khi bấm; dùng model đã chọn và quyền cloud hiện có. Các đề xuất phải có trích dẫn khớp nguồn; người dùng xem sửa, chọn giờ nhắc rồi bấm lưu.
+- Công việc và trích dẫn đã lưu nằm trong SQLite trên máy. Không gửi công việc sang AritoActive, lịch Google hoặc Outlook.
+- Nhắc hạn hoạt động khi app đang chạy (kể cả ẩn dưới khay). Đóng hoàn toàn hoặc tắt máy thì không thể nhắc; khi mở lại, các nhắc chưa phát được kiểm tra lại. Thông báo chỉ báo có việc đến hạn, không chứa nội dung công việc. Bấm thông báo mở mục Công việc.
+- Xóa dữ liệu cục bộ cũng xóa toàn bộ công việc. Hoàn thành công việc sẽ bỏ nhắc. Đổi giờ nhắc cho phép nhắc lại; giữ nguyên giờ thì không lặp.
+
+Kiểm tra tự động: frontend 79 test đạt; typecheck/build đạt. Kiểm tra Rust và đóng gói được ghi trong báo cáo thực hiện. Chưa xác minh đầy đủ DOM Outlook, icon khay và Windows toast trên các phiên chat đăng nhập thật.

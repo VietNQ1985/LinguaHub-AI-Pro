@@ -1,3 +1,4 @@
+import { WorkTasks } from './WorkTasks'
 import { MeetingTranslation } from './MeetingTranslation'
 import { ExternalProviders } from './ExternalProviders'
 import { WhisperTranslation } from './WhisperTranslation'
@@ -55,11 +56,12 @@ export function AiPanel() {
   const [service,setService]=useState('whatsapp')
   // Zoom and Google Meet support meeting-caption translation only, not chat-message translation.
   const meetingCapable=service==='teams'||service==='zoom'||service==='meet'
-  const chatCapable=service==='whatsapp'||service==='telegram'||service==='zalo'||meetingCapable
+  const chatCapable=service==='whatsapp'||service==='telegram'||service==='zalo'||service==='outlook'||meetingCapable
   useEffect(()=>{const changed=(event:Event)=>{const value=(event as CustomEvent<string>).detail;setService(value);setMeetingMode(value==='zoom'||value==='meet');invalidateReply()};window.addEventListener('linguahub:service',changed);return()=>window.removeEventListener('linguahub:service',changed)},[])
   const [meetingMode,setMeetingMode]=useState(false)
   const [captionsMode,setCaptionsMode]=useState(false)
   const [mode, setMode] = useState<PanelMode>('translate')
+  useEffect(()=>window.lingua.onShortcut?.(action=>{if(action==='tasks')setMode('translate')}),[])
   const [model, setModel] = useState('')
   // Optional separate model for suggestions and reply translation ('' = same as the translation model).
   const [replyModel, setReplyModel] = useState('')
@@ -376,9 +378,10 @@ export function AiPanel() {
     </div>
 
     <div className="assistant-content">
+      {mode==='translate'&&<WorkTasks service={service} model={model}/>}
       {/* Permissions live in Settings only; features still ask when a permission is needed. */}
       {service==='zalo'&&<ZaloCallBar />}
-      <div className="meeting-modes" role="group" aria-label="Chế độ dịch"><button type="button" aria-pressed={!meetingMode&&!captionsMode} onClick={()=>{invalidateReply();setMeetingMode(false);setCaptionsMode(false)}} title="Dịch tin nhắn đang hiển thị">Tin nhắn</button><button type="button" disabled={!meetingCapable} aria-pressed={meetingMode&&!captionsMode} onClick={()=>{invalidateReply();setMeetingMode(true);setCaptionsMode(false)}} title="Dịch phụ đề có sẵn của Teams/Zoom/Meet">Cuộc họp</button><button type="button" aria-pressed={captionsMode} onClick={()=>{invalidateReply();setCaptionsMode(true)}} title="Nghe âm thanh trên máy và tạo phụ đề bằng Whisper">Phụ đề</button></div>
+      <div className="meeting-modes" role="group" aria-label="Chế độ dịch"><button type="button" aria-pressed={!meetingMode&&!captionsMode} onClick={()=>{invalidateReply();setMeetingMode(false);setCaptionsMode(false)}} title="Dịch tin nhắn đang hiển thị">{service==='outlook'?'Email':'Tin nhắn'}</button><button type="button" disabled={!meetingCapable} aria-pressed={meetingMode&&!captionsMode} onClick={()=>{invalidateReply();setMeetingMode(true);setCaptionsMode(false)}} title="Dịch phụ đề có sẵn của Teams/Zoom/Meet">Cuộc họp</button><button type="button" aria-pressed={captionsMode} onClick={()=>{invalidateReply();setCaptionsMode(true)}} title="Nghe âm thanh trên máy và tạo phụ đề bằng Whisper">Phụ đề</button></div>
       {meetingCapable&&!meetingMode&&!captionsMode&&<p className="meeting-hint">Đang ở chế độ dịch tin nhắn. Để đọc phụ đề khi họp: chọn <button type="button" onClick={()=>{invalidateReply();setMeetingMode(true)}}>Dịch cuộc họp</button>, bật phụ đề English trong {service==='zoom'?'Zoom':service==='meet'?'Google Meet':'Teams'} rồi bấm Bắt đầu dịch.</p>}
       {meetingMode&&!captionsMode&&mode==='translate'&&<MeetingTranslation model={model} service={service}/>}
       {/* Always mounted so Whisper can be preloaded at startup; hidden unless this mode is chosen. */}

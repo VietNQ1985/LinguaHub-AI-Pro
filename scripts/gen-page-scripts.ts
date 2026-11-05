@@ -15,6 +15,8 @@ const out = resolve('src-tauri/page-scripts')
 mkdirSync(out, { recursive: true })
 const write = (name: string, code: string) => writeFileSync(resolve(out, name), code.trim() + '\n', 'utf8')
 
+write('read-outlook.js', buildVisibleChatReadScript('outlook'))
+
 const services: ChatService[] = ['whatsapp', 'teams', 'zoom', 'meet', 'zalo', 'telegram']
 for (const service of services) {
   write(`read-${service}.js`, buildVisibleChatReadScript(service))

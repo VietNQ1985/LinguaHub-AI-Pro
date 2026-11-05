@@ -2,7 +2,7 @@ import { JSDOM } from 'jsdom'
 import { expect, test } from 'vitest'
 import { buildVisibleChatReadScript } from './chat-dom-reader'
 
-function runPageScript(html: string, service: 'whatsapp' | 'teams' | 'zoom' | 'meet' | 'zalo' | 'telegram') {
+function runPageScript(html: string, service: 'whatsapp' | 'teams' | 'zoom' | 'meet' | 'zalo' | 'telegram' | 'outlook') {
   const dom = new JSDOM(html, { runScripts: 'outside-only', pretendToBeVisual: true })
   dom.window.HTMLElement.prototype.getBoundingClientRect = function () {
     const height = this.getAttribute('data-hidden') === 'true' ? 0 : 30
@@ -207,4 +207,12 @@ test('reads the active Telegram chat when a forum keeps a hidden topic list chat
   expect(result.conversationHint).toBe('id:1_5')
   expect(result.messages).toEqual([{ text: 'Configuring the SSH Client', side: 'left', id: '21' }])
   dom.window.close()
+})
+
+test('Outlook reads the visible opened mail, excluding inbox, hidden mail and drafts',()=>{
+ const {dom,result}=runPageScript(`<aside>Inbox preview</aside><h2>ERP request</h2><div role="document">Please review the invoice.\nSend feedback by Friday.</div><div role="document" data-hidden="true">Hidden email</div><div contenteditable="true"><div role="document">Unsent draft</div></div>`, 'outlook')
+ expect(result.messages).toHaveLength(1)
+ expect(result.messages[0].text).toBe('Please review the invoice.\nSend feedback by Friday.')
+ expect(result.conversationHint).toContain('ERP request')
+ dom.window.close()
 })

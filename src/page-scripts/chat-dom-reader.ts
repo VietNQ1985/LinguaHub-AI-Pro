@@ -1,4 +1,4 @@
-export type ChatService = 'whatsapp' | 'teams' | 'zoom' | 'meet' | 'zalo' | 'telegram'
+export type ChatService = 'whatsapp' | 'teams' | 'zoom' | 'meet' | 'zalo' | 'telegram' | 'outlook'
 export type ChatDomMessage = { text: string; side: 'left' | 'right' | 'center'; id?: string }
 export type ChatDomSnapshot = { conversationHint: string; messages: ChatDomMessage[] }
 
@@ -8,6 +8,23 @@ export function buildVisibleChatReadScript(service: ChatService) {
 }
 
 function readVisibleChatPage(service: ChatService): ChatDomSnapshot {
+  if (service === 'outlook') {
+    const visible = (node: Element) => {
+      const r = node.getBoundingClientRect(), style = getComputedStyle(node)
+      return r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight && style.display !== 'none' && style.visibility !== 'hidden'
+    }
+    // Read only the open message body; never the inbox, editor, or hidden mail.
+    const bodies = Array.from(document.querySelectorAll('[role="document"], [data-testid="message-body"], .allowTextSelection'))
+      .filter(node => visible(node) && !node.closest('[contenteditable="true"], [role="textbox"]'))
+    const unique = bodies.filter(node => !bodies.some(other => other !== node && other.contains(node)))
+    const body = unique.slice(-1).map(node => ((node as HTMLElement).innerText || node.textContent || '').trim()).join('')
+    const messages: ChatDomMessage[] = []
+    for(let offset=0; offset<body.length; offset+=3500) messages.push({text:body.slice(offset,offset+3500),side:'left'})
+    const title = Array.from(document.querySelectorAll('[role="heading"], h1, h2')).filter(visible).map(node => ((node as HTMLElement).innerText || node.textContent || '').trim()).filter(Boolean).pop() || ''
+    // Include body identity when Outlook does not expose a stable mail id.
+    return { conversationHint: location.href + ':' + title + ':' + (messages[0]?.text.slice(0, 100) || ''), messages }
+  }
+
   const visibleWithin = (element: Element, clip?: DOMRect) => {
     const rect = element.getBoundingClientRect()
     const style = window.getComputedStyle(element)

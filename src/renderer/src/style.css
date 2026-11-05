@@ -465,3 +465,7 @@ button.reply-choice-text:hover { color: var(--accent); }
 .reply-choice-vi:hover { color: var(--text); }
 .reply-choice-vi-open { display: block; -webkit-line-clamp: unset; overflow: visible; color: var(--text); }
 .reply-choice-note { margin: 4px 0 0; font-size: 11.5px; line-height: 1.4; color: var(--muted); font-style: italic; }
+
+.work-tasks {border:1px solid #dce4ef;border-radius:12px;padding:12px;margin:12px 0}.work-tasks summary{cursor:pointer;font-weight:600}.work-tasks form{display:grid;gap:8px;margin:12px 0}.work-tasks label{display:grid;gap:4px}.work-tasks article{padding:10px 0;border-top:1px solid #dce4ef}.work-tasks small{display:block}.work-tasks blockquote{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;margin:8px 0;padding-left:10px;border-left:2px solid #94a3b8}
+
+.translation-vietnamese, .translation-source, .translation-original {white-space:pre-wrap;overflow-wrap:anywhere}

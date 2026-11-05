@@ -15,7 +15,7 @@ pub const DEFAULT_TRANSLATION_REASONING_EFFORT: &str = "low";
 const DAY_MS: i64 = 86_400_000;
 /// Tabs in the order they appear.
 pub const APPS: [&str; 7] = ["whatsapp", "telegram", "teams", "outlook", "zoom", "meet", "zalo"];
-const REMEMBER_KEYS: [&str; 8] = ["teams", "zoom", "meet", "captions", "chat", "mic", "zalo", "reviewed"];
+const REMEMBER_KEYS: [&str; 9] = ["teams", "zoom", "meet", "captions", "chat", "mic", "zalo", "reviewed", "outlook"];
 
 pub struct Store {
     conn: Mutex<Connection>,
@@ -79,6 +79,7 @@ impl Store {
         let conn = Connection::open(&filename)?;
         conn.execute_batch(
             "PRAGMA journal_mode=WAL;
+             CREATE TABLE IF NOT EXISTS work_tasks (id TEXT PRIMARY KEY, data TEXT NOT NULL, remind_at INTEGER, notified INTEGER NOT NULL DEFAULT 0);
              CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
              CREATE TABLE IF NOT EXISTS vocabulary (id TEXT PRIMARY KEY, term TEXT NOT NULL, meaning TEXT NOT NULL, phonetic TEXT NOT NULL DEFAULT '', example TEXT NOT NULL DEFAULT '', tags TEXT NOT NULL DEFAULT '[]', created_at INTEGER NOT NULL, due_at INTEGER NOT NULL, interval_days INTEGER NOT NULL DEFAULT 0, ease_factor REAL NOT NULL DEFAULT 2.5, repetitions INTEGER NOT NULL DEFAULT 0);
              CREATE TABLE IF NOT EXISTS activity (id TEXT PRIMARY KEY, kind TEXT NOT NULL, created_at INTEGER NOT NULL, metadata TEXT NOT NULL DEFAULT '{}');",
@@ -388,7 +389,7 @@ impl Store {
 
     pub fn clear_all(&self) -> anyhow::Result<()> {
         let conn = self.conn.lock().unwrap();
-        conn.execute_batch("DELETE FROM vocabulary; DELETE FROM activity; DELETE FROM app_settings;")?;
+        conn.execute_batch("DELETE FROM vocabulary; DELETE FROM activity; DELETE FROM app_settings; DELETE FROM work_tasks;")?;
         Ok(())
     }
 
@@ -475,4 +476,64 @@ mod tests {
         assert_eq!(apps["reviewed"], true);
         let _ = std::fs::remove_dir_all(dir);
     }
+}
+
+impl Store {
+    pub fn tasks_list(&self) -> anyhow::Result<Vec<Value>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT data FROM work_tasks ORDER BY rowid DESC LIMIT 5000")?;
+        let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+        rows.map(|row| Ok(serde_json::from_str(&row?)?)).collect()
+    }
+    pub fn task_save(&self, mut data: Value) -> anyhow::Result<Value> {
+        let title = data["title"].as_str().unwrap_or("").trim().to_owned();
+        if title.is_empty() || title.chars().count() > 200 || data.to_string().len() > 20000 { anyhow::bail!("Nội dung công việc không hợp lệ."); }
+        if !matches!(data["status"].as_str(), Some("todo" | "doing" | "done")) { anyhow::bail!("Trạng thái không hợp lệ."); }
+        let id = match data["id"].as_str() { Some(id) => { uuid::Uuid::parse_str(id)?; id.to_owned() }, None => uuid::Uuid::new_v4().to_string() };
+        let remind = if data["remindAt"].is_null() { None } else { Some(data["remindAt"].as_i64().filter(|v| *v > 0).ok_or_else(|| anyhow::anyhow!("Giờ nhắc không hợp lệ."))?) };
+        data["id"] = json!(id); data["title"] = json!(title); data["updatedAt"] = json!(now_ms());
+        let conn = self.conn.lock().unwrap();
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM work_tasks", [], |row| row.get(0))?;
+        let exists: bool = conn.query_row("SELECT EXISTS(SELECT 1 FROM work_tasks WHERE id=?1)", [&id], |row| row.get(0))?;
+        if !exists && count >= 5000 { anyhow::bail!("Đạt giới hạn 5000 công việc."); }
+        conn.execute("INSERT INTO work_tasks(id,data,remind_at) VALUES(?1,?2,?3) ON CONFLICT(id) DO UPDATE SET data=excluded.data,remind_at=excluded.remind_at,notified=CASE WHEN work_tasks.remind_at IS excluded.remind_at THEN work_tasks.notified ELSE 0 END", params![id,data.to_string(),if data["status"] == "done" { None } else { remind }])?;
+        Ok(data)
+    }
+    pub fn task_delete(&self, id: &str) -> anyhow::Result<()> {
+        uuid::Uuid::parse_str(id)?;
+        self.conn.lock().unwrap().execute("DELETE FROM work_tasks WHERE id=?1", [id])?;
+        Ok(())
+    }
+    pub fn pending_reminders(&self) -> anyhow::Result<Vec<String>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT id FROM work_tasks WHERE remind_at<=?1 AND notified=0 LIMIT 20")?;
+        let rows = stmt.query_map([now_ms()], |row| row.get(0))?;
+        Ok(rows.collect::<rusqlite::Result<Vec<String>>>()?)
+    }
+    pub fn reminder_delivered(&self, id: &str) -> anyhow::Result<()> {
+        self.conn.lock().unwrap().execute("UPDATE work_tasks SET notified=1 WHERE id=?1", [id])?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod task_tests {
+ use super::*;
+ #[test]
+ fn reminders_survive_restart_and_do_not_repeat_or_fire_for_completed_tasks() {
+  let dir=std::env::temp_dir().join(format!("lh-task-test-{}",uuid::Uuid::new_v4()));
+  let task;
+  {let store=Store::open_with(&dir,false).unwrap();
+   task=store.task_save(json!({"title":"Kiểm tra hóa đơn","status":"todo","remindAt":now_ms()-1000})).unwrap();
+   assert_eq!(store.pending_reminders().unwrap().len(),1);
+   store.reminder_delivered(task["id"].as_str().unwrap()).unwrap();
+   assert!(store.pending_reminders().unwrap().is_empty());}
+  {let store=Store::open_with(&dir,false).unwrap();
+   assert!(store.pending_reminders().unwrap().is_empty());
+   assert_eq!(store.tasks_list().unwrap().len(),1);
+   let mut changed=task;changed["remindAt"]=json!(now_ms()-500);changed["status"]=json!("done");
+   store.task_save(changed).unwrap();assert!(store.pending_reminders().unwrap().is_empty());
+   store.clear_all().unwrap();assert!(store.tasks_list().unwrap().is_empty());}
+  let _=std::fs::remove_dir_all(dir);
+ }
 }

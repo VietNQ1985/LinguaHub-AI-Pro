@@ -19,6 +19,7 @@ const AGENT: &str = include_str!("../page-scripts/agent.js");
 
 pub fn read_script(service: &str) -> &'static str {
     match service {
+        "outlook" => include_str!("../page-scripts/read-outlook.js"),
         "whatsapp" => include_str!("../page-scripts/read-whatsapp.js"),
         "teams" => include_str!("../page-scripts/read-teams.js"),
         "zoom" => include_str!("../page-scripts/read-zoom.js"),
@@ -119,7 +120,7 @@ pub fn clean_snapshot(snapshot: &Value) -> Vec<Value> {
     filtered[start..]
         .iter()
         .map(|item| {
-            let text: String = item["text"].as_str().unwrap_or_default().trim().chars().take(4000).collect();
+            let text: String = item["text"].as_str().unwrap_or_default().trim().chars().take(12000).collect();
             let side = match item["side"].as_str() {
                 Some("left") => "left",
                 Some("right") => "right",
@@ -141,8 +142,8 @@ pub fn conversation_id(service: &str, url: &str, snapshot: &Value) -> String {
 /// Reads the visible chat of the active service tab.
 pub async fn read_visible<R: Runtime>(app: &AppHandle<R>) -> anyhow::Result<Value> {
     let Some((service, webview)) = current_view(app) else { return Ok(Value::Null) };
-    // Outlook is a plain tab: mail is not read as chat.
-    if service == "outlook" || !window_visible(app) {
+    // Read only the visible, authorized workspace.
+    if !window_visible(app) {
         return Ok(Value::Null);
     }
     let url = webview.url()?.to_string();
@@ -157,6 +158,7 @@ pub async fn read_visible<R: Runtime>(app: &AppHandle<R>) -> anyhow::Result<Valu
 
 fn emit_unread<R: Runtime>(app: &AppHandle<R>) {
     let counts = app.state::<AppState>().lock().unread.clone();
+    crate::tray_badge::update(app, &counts);
     let _ = app.emit_to("ui", "workspace-unread", counts);
 }
 

@@ -9,6 +9,8 @@ mod db;
 mod dialog;
 mod models;
 mod notify;
+mod tray_badge;
+mod task_reminders;
 mod providers;
 mod secrets;
 mod state;
@@ -149,10 +151,14 @@ pub fn run() {
                 log::warn!("tray icon unavailable");
             }
             stt::start_idle_unloader(handle.clone());
+            task_reminders::start(handle.clone());
             workspace::start_polling(handle);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::tasks_list,
+            commands::tasks_save,
+            commands::tasks_delete,
             commands::window_tray,
             commands::window_always_on_top,
             commands::workspace_panel_layout,

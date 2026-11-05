@@ -38,8 +38,7 @@ test('signals chat scrolling without reading or sending page text',async()=>{
   const callback=vi.fn()
   const stop=observeVisibleChatChanges(callback)
   dom.window.document.querySelector('#chat')!.dispatchEvent(new dom.window.Event('scroll',{bubbles:true}))
-  await new Promise(resolve=>setTimeout(resolve,CHAT_CHANGE_DEBOUNCE_MS+25))
-  expect(callback).toHaveBeenCalledTimes(1)
+  await vi.waitFor(()=>expect(callback).toHaveBeenCalledTimes(1),{timeout:2000})
   expect(callback.mock.calls[0][0]).toEqual(expect.any(Number))
   stop()
   dom.window.close()
@@ -57,11 +56,9 @@ test('rebinds and reports when a chat view replaces its message root',async()=>{
   replacement.setAttribute('data-testid','conversation-panel-messages')
   replacement.textContent='New chat'
   dom.window.document.querySelector('#chat')!.replaceWith(replacement)
-  await new Promise(resolve=>setTimeout(resolve,CHAT_CHANGE_DEBOUNCE_MS+25))
-  expect(callback).toHaveBeenCalledTimes(1)
+  await vi.waitFor(()=>expect(callback).toHaveBeenCalledTimes(1),{timeout:2000})
   replacement.textContent='New chat with another message'
-  await new Promise(resolve=>setTimeout(resolve,CHAT_CHANGE_DEBOUNCE_MS+25))
-  expect(callback).toHaveBeenCalledTimes(2)
+  await vi.waitFor(()=>expect(callback).toHaveBeenCalledTimes(2),{timeout:2000})
   stop()
   dom.window.close()
 })

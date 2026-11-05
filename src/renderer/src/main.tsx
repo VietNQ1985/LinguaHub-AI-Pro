@@ -15,6 +15,9 @@ type UiService=WorkspaceService
 declare global {
   interface Window {
     lingua: {
+      listTasks(): Promise<import('./WorkTasks').WorkTask[]>
+      saveTask(input: import('./WorkTasks').WorkTask): Promise<import('./WorkTasks').WorkTask>
+      deleteTask(id: string): Promise<void>
       getWorkspaceUnread():Promise<UnreadCounts>
       onWorkspaceUnread(callback:(counts:UnreadCounts)=>void):()=>void
       hideToTray():Promise<boolean>

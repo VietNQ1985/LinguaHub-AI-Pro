@@ -2,6 +2,7 @@ import { expect, test, vi } from 'vitest'
 import { JSDOM } from 'jsdom'
 import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
+vi.mock('./WorkTasks',()=>({WorkTasks:()=>null}))
 vi.mock('./LiveTranslation',()=>({LiveTranslation:()=>null}))
 vi.mock('./ChatGPTAccount',()=>({ChatGPTAccount:()=>null}))
 vi.mock('./AdvancedSettings',()=>({AdvancedSettings:()=>null}))
