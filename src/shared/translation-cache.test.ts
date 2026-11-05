@@ -16,3 +16,10 @@ test('keeps structured per-message translation and explanation together',()=>{
   cache.set('ollama','Please review this.',{translation:'Vui lòng kiểm tra.',explanation:'Câu yêu cầu lịch sự.'},0)
   expect(cache.get('ollama','Please review this.',1)).toEqual({translation:'Vui lòng kiểm tra.',explanation:'Câu yêu cầu lịch sự.'})
 })
+test('isolates translation cache by conversation and stable message while sharing identical idless content',()=>{
+  const cache=new TranslationCache<string>()
+  cache.set('chatgpt:gpt-6-luna','Thanks','Cảm ơn',0,'["conv-a","message-1"]')
+  expect(cache.get('chatgpt:gpt-6-luna','Thanks',1,'["conv-a","message-1"]')).toBe('Cảm ơn')
+  expect(cache.get('chatgpt:gpt-6-luna','Thanks',1,'["conv-b","message-1"]')).toBeUndefined()
+  expect(cache.get('ollama:qwen','Thanks',1,'["conv-a","message-1"]')).toBeUndefined()
+})

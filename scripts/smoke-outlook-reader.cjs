@@ -1,0 +1,17 @@
+const { app, BrowserWindow, session } = require('electron')
+const { mkdtempSync, readFileSync } = require('node:fs')
+const { tmpdir } = require('node:os')
+const { join } = require('node:path')
+app.setPath('userData', mkdtempSync(join(tmpdir(), 'linguahub-outlook-reader-')))
+let window
+app.whenReady().then(async () => {
+ const isolated = session.fromPartition('outlook-reader-fixture')
+ await isolated.protocol.handle('https', () => new Response(`<!doctype html><nav>PRIVATE_PREVIEW</nav><main role="main"><section data-app-section="MailReadCompose" data-conversation-id="fixture-thread"><h1>Order review</h1><article data-itemid="fixture-mail"><div role="document">Please review the purchase order.</div></article><div role="document" style="display:none">HIDDEN_MAIL</div><div contenteditable="true" role="textbox"><div role="document">UNSENT_DRAFT</div></div></section></main>`, { headers: { 'content-type': 'text/html' } }))
+ window = new BrowserWindow({ show: false, width: 1000, height: 700, webPreferences: { session: isolated, nodeIntegration: false, contextIsolation: true, sandbox: true } })
+ await window.loadURL('https://outlook.office.com/fixture')
+ const script = readFileSync(process.env.LINGUAHUB_READER_FIXTURE_SCRIPT, 'utf8')
+ const snapshot = await window.webContents.executeJavaScript(script)
+ if (snapshot.conversationHint !== 'id:fixture-thread' || snapshot.messages.length !== 1 || snapshot.messages[0].text !== 'Please review the purchase order.' || snapshot.messages[0].id !== 'fixture-mail') throw new Error('Outlook reader did not isolate visible mail')
+ console.log('OUTLOOK_READER_SMOKE: real Chromium DOM; selected visible mail only; mailbox previews, hidden mail and draft excluded')
+ window.destroy(); app.quit()
+}).catch(error => { console.error(error.message); if (window && !window.isDestroyed()) window.destroy(); app.exit(1) })

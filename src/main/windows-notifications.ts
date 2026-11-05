@@ -13,6 +13,5 @@ export function toastShortcutDetails(executablePath: string) {
     cwd: win32.dirname(executablePath),
     description: 'LinguaHub AI Pro',
     appUserModelId: APP_USER_MODEL_ID,
-    toastActivatorClsid: TOAST_ACTIVATOR_CLSID,
   }
 }

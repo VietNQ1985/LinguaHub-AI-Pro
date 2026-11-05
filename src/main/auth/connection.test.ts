@@ -41,20 +41,52 @@ test('refreshes an expired access token, stores rotated credentials, then lists 
   expect(stored).toMatchObject({accessToken:'new-access',refreshToken:'new-refresh',clientId:'oaiapp_issued'})
 })
 
+test('accepts object entries in advertised reasoning levels',async()=>{
+  await writeFile(join(directory,'chatgpt.enc'),Buffer.from(JSON.stringify({...record,expiresAt:Date.now()+3600000})))
+  const request=vi.fn(async(input:RequestInfo|URL)=>{
+    if(String(input)==='https://api.openai.com/v1/models')return new Response(JSON.stringify({models:[{
+      slug:'gpt-object-levels',display_name:'Object levels',visibility:'list',
+      supported_reasoning_levels:[{level:'low',description:'Low reasoning'},{level:'none',description:'No reasoning'},{level:'unsupported'}],
+    }]}),{status:200})
+    throw new Error(`Unexpected request ${String(input)}`)
+  })
+  const connection=new ChatGPTConnection(directory,request as typeof fetch)
+  await connection.initialize()
+  await expect(connection.listModels()).resolves.toEqual([{slug:'gpt-object-levels',name:'Object levels',reasoningEfforts:['low','none']}])
+})
+
 test('sends Responses API input as a user content list',async()=>{
   await writeFile(join(directory,'chatgpt.enc'),Buffer.from(JSON.stringify({...record,expiresAt:Date.now()+3600000})))
   let requestBody:Record<string,unknown>|undefined
   const request=vi.fn(async(input:RequestInfo|URL,init?:RequestInit)=>{
+    if(String(input)==='https://api.openai.com/v1/models')return new Response(JSON.stringify({models:[{slug:'gpt-test',display_name:'Test',visibility:'list',supported_reasoning_efforts:['low','none']}]}),{status:200})
     if(String(input)==='https://api.openai.com/v1/responses'){
       requestBody=JSON.parse(String(init?.body))
-      return new Response('data: {"type":"response.output_text.delta","delta":"Chào buổi sáng."}\n\ndata: {"type":"response.completed"}\n\n',{status:200})
+      return new Response('data: {"type":"response.output_text.delta","delta":"Chào "}\n\ndata: {"type":"response.output_text.delta","delta":"buổi sáng."}\n\ndata: {"type":"response.completed"}\n\n',{status:200})
     }
     throw new Error(`Unexpected request ${String(input)}`)
   })
   const connection=new ChatGPTConnection(directory,request as typeof fetch)
   await connection.initialize()
-  await expect(connection.respond('gpt-test','Good morning.','Translate this sentence.')).resolves.toBe('Chào buổi sáng.')
+  const deltas:string[]=[]
+  await expect(connection.respond('gpt-test','Good morning.','Translate this sentence.',undefined,'low',undefined,delta=>deltas.push(delta))).resolves.toBe('Chào buổi sáng.')
+  expect(deltas).toEqual(['Chào ','buổi sáng.'])
   expect(requestBody).toMatchObject({model:'gpt-test',input:[{role:'user',content:'Good morning.'}],instructions:'Translate this sentence.',store:false,stream:true})
+  expect(requestBody).toHaveProperty('reasoning',{effort:'low'})
+})
+
+test('blocks models outside the account list and rejects unadvertised None before inference',async()=>{
+  await writeFile(join(directory,'chatgpt.enc'),Buffer.from(JSON.stringify({...record,expiresAt:Date.now()+3600000})))
+  const request=vi.fn(async(input:RequestInfo|URL)=>{
+    if(String(input)==='https://api.openai.com/v1/models')return new Response(JSON.stringify({models:[{slug:'gpt-listed',display_name:'Listed',visibility:'list',supported_reasoning_efforts:['low']}]}),{status:200})
+    if(String(input)==='https://api.openai.com/v1/responses')return new Response('',{status:500})
+    throw new Error(`Unexpected request ${String(input)}`)
+  })
+  const connection=new ChatGPTConnection(directory,request as typeof fetch)
+  await connection.initialize()
+  await expect(connection.respond('gpt-unlisted','Hello','Translate',undefined,'low')).rejects.toThrow('không nằm trong danh sách')
+  await expect(connection.respond('gpt-listed','Hello','Translate',undefined,'none')).rejects.toThrow('chưa xác nhận')
+  expect(request.mock.calls.filter(([url])=>String(url)==='https://api.openai.com/v1/responses')).toHaveLength(0)
 })
 
 test('serializes concurrent refreshes so rotating refresh tokens are used once',async()=>{
@@ -147,4 +179,53 @@ test('clearLocalData reports when remote revocation cannot be confirmed',async()
   await expect(connection.clearLocalData()).resolves.toEqual({revoked:false})
   expect(request).not.toHaveBeenCalled()
   await expect(readFile(join(directory,'chatgpt.enc'))).rejects.toMatchObject({code:'ENOENT'})
+})
+
+
+test('fresh workspace registration does not reuse an issued client and preserves the old ChatGPT session on failure',async()=>{
+  const authorizeUrls:URL[]=[]
+  openExternal.mockImplementation(async(href:string)=>{
+    const authorizeUrl=new URL(href)
+    authorizeUrls.push(authorizeUrl)
+    const callback=new URL(authorizeUrl.searchParams.get('redirect_uri')!)
+    const parameters=new URLSearchParams({
+      code:'new-registration-code',
+      client_id:'oaiapp_different_workspace',
+      state:authorizeUrl.searchParams.get('state')!,
+    })
+    await fetch(callback.toString()+'?'+parameters.toString())
+  })
+  const request=vi.fn(async()=>new Response(JSON.stringify({error:'invalid_grant'}),{status:400}))
+  const connection=new ChatGPTConnection(directory,request as typeof fetch)
+  await connection.initialize()
+  await expect(connection.connect(true)).rejects.toThrow('400')
+  expect(authorizeUrls).toHaveLength(1)
+  expect(authorizeUrls[0].searchParams.get('client_id')).toBe('dynamic_agent_client')
+  expect(authorizeUrls[0].searchParams.get('agent_name_hint')).toBe('LinguaHub AI Pro')
+  expect(authorizeUrls[0].searchParams.has('id_token_hint')).toBe(false)
+  expect(authorizeUrls[0].searchParams.has('login_hint')).toBe(false)
+  expect(connection.status()).toMatchObject({connected:true,email:'user@example.com',usageEnabled:true})
+  const kept=JSON.parse((await readFile(join(directory,'chatgpt.enc'))).toString('utf8'))
+  expect(kept.clientId).toBe('oaiapp_issued')
+  expect(kept.accessToken).toBe('old-access')
+  expect(await readFile(join(directory,'chatgpt-registration.json'),'utf8')).toContain('oaiapp_issued')
+})
+
+test('routine reauthorization reuses the saved account and its workspace registration',async()=>{
+  let authorizeUrl:URL|undefined
+  openExternal.mockImplementation(async(href:string)=>{
+    authorizeUrl=new URL(href)
+    const callback=new URL(authorizeUrl.searchParams.get('redirect_uri')!)
+    const parameters=new URLSearchParams({
+      code:'expired-code',
+      state:authorizeUrl.searchParams.get('state')!,
+    })
+    await fetch(callback.toString()+'?'+parameters.toString())
+  })
+  const connection=new ChatGPTConnection(directory,vi.fn(async()=>new Response('',{status:400})) as typeof fetch)
+  await connection.initialize()
+  await expect(connection.connect()).rejects.toThrow('400')
+  expect(authorizeUrl?.searchParams.get('client_id')).toBe('oaiapp_issued')
+  expect(authorizeUrl?.searchParams.get('id_token_hint')).toBe('old-id')
+  expect(authorizeUrl?.searchParams.get('login_hint')).toBe('user@example.com')
 })

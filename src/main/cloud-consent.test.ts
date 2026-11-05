@@ -2,16 +2,22 @@ import { describe, expect, test } from 'vitest'
 import { hasCloudConsentForTask } from './cloud-consent'
 
 describe('ChatGPT cloud consent scopes', () => {
-  test('manual content consent does not authorize background OCR translation', () => {
+  test('manual content consent does not authorize background visible-chat translation', () => {
     expect(hasCloudConsentForTask('translateMessages', true, false)).toBe(false)
+    expect(hasCloudConsentForTask('translateLatest', true, false)).toBe(false)
   })
 
-  test('background OCR consent does not authorize manually submitted content', () => {
+  test('background visible-chat consent does not authorize manually submitted content', () => {
     expect(hasCloudConsentForTask('translate', false, true)).toBe(false)
   })
 
   test('each consent permits only its intended class of task', () => {
     expect(hasCloudConsentForTask('translateMessages', false, true)).toBe(true)
+    expect(hasCloudConsentForTask('translateLatest', false, true)).toBe(true)
+    expect(hasCloudConsentForTask('replyFromChat', false, true)).toBe(true)
+    expect(hasCloudConsentForTask('replyTranslationFromChat', false, true)).toBe(true)
+    expect(hasCloudConsentForTask('replyTranslationFromChat', true, false)).toBe(false)
+    expect(hasCloudConsentForTask('replyFromChat', true, false)).toBe(false)
     expect(hasCloudConsentForTask('translate', true, false)).toBe(true)
   })
 })

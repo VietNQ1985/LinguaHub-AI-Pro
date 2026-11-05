@@ -1,0 +1,42 @@
+name: Windows Installer
+
+on:
+  push:
+    branches:
+      - feature/linguahub-v2-messaging
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-package:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm run package:windows
+      - run: node scripts/verify-windows-package.mjs
+      - run: node scripts/smoke-packaged-windows.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LinguaHub-AI-Pro-Windows
+          path: release/*.exe
+          if-no-files-found: error
+          retention-days: 30

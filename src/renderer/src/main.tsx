@@ -1,14 +1,25 @@
+import { TasksPanel } from './TasksPanel'
 import React from 'react'
 import { createRoot } from 'react-dom/client'
 import './style.css'
-import './dashboard.css'
 import { AiPanel } from './AiPanel'
+import type {UnreadCounts} from '../../shared/workspace-unread'
+import {WorkspaceUnreadBadge} from './WorkspaceUnreadBadge'
+import { ZaloPcPane } from './ZaloPcPane'
 
-type WorkspaceService = 'whatsapp' | 'teams'
+type WorkspaceService = 'whatsapp' | 'teams' | 'zalo' | 'outlook'
+type UiService=WorkspaceService|'zalopc'
 
 declare global {
   interface Window {
     lingua: {
+      listTasks():Promise<import('../../main/tasks').WorkTask[]>
+      saveTask(input:unknown):Promise<import('../../main/tasks').WorkTask>
+      extractTasksFromVisible(service:import('../../main/tasks').TaskSourceService,model:string,requestId:string):Promise<import('../../main/tasks').TaskCaptureResult&{cancelled:boolean}>
+      openWindowsVoiceTyping():Promise<boolean>
+      getWorkspaceUnread():Promise<UnreadCounts>
+      onWorkspaceUnread(callback:(counts:UnreadCounts)=>void):()=>void
+      hideToTray():Promise<boolean>
       onShortcut(callback: (action: string) => void): () => void
       reloadWorkspace(): Promise<{ title: string }>
       setWorkspacePanelLayout(width: number, collapsed: boolean, persist?: boolean): void
@@ -16,60 +27,101 @@ declare global {
       showDashboard(): Promise<boolean>
       openExternal(service: WorkspaceService): Promise<void>
       testNotification(): Promise<boolean>
-      getNotificationPreferences(): Promise<{ whatsapp: boolean; teams: boolean }>
-      setNotificationPreference(service: WorkspaceService, enabled: boolean): Promise<{ whatsapp: boolean; teams: boolean }>
-      authorizeOcr(): Promise<boolean>
-      getOcrAssetPaths(): Promise<{ workerUrl: string; corePath: string }>
-      stopOcr(): Promise<void>
-      readOcr(left: number): Promise<{ pngBase64: string; width: number; height: number } | null>
+      getNotificationPreferences(): Promise<{ whatsapp: boolean; teams: boolean; zalo:boolean; outlook:boolean }>
+      setNotificationPreference(service: WorkspaceService, enabled: boolean): Promise<{ whatsapp: boolean; teams: boolean; zalo:boolean; outlook:boolean }>
+      authorizeVisibleChatRead(): Promise<boolean>
+      hasVisibleChatReadAuthorization(): Promise<boolean>
+      stopVisibleChatRead(): Promise<void>
+      sendChatMessage(text: string, conversationId: string): Promise<{ sent: boolean; cancelled: boolean; recipient: string }>
+      sendConfirm(value?: boolean): Promise<boolean>
+      openZaloPc(): Promise<{ installed: boolean; running: boolean; connected: boolean; embedded: boolean }>
+      embedZaloPc(enabled: boolean): Promise<boolean>
+      callZaloViaPc(kind: 'voice' | 'video'): Promise<{ called: boolean; name: string }>
+      zaloPcStatus(): Promise<{ installed: boolean; running: boolean; connected: boolean }>
+      connectZaloPc(): Promise<boolean>
+      callZaloPc(kind: 'voice' | 'video'): Promise<boolean>
+      getPermissions(): Promise<{ chat: boolean; mic: boolean; teams: boolean; zalo: boolean; reviewed: boolean }>
+      setPermissions(grants: { chat: boolean; mic: boolean; teams: boolean; zalo: boolean }): Promise<boolean>
+      readVisibleChat(): Promise<{ conversationId: string; text: string; messages: Array<{ text: string; side: 'left' | 'right' | 'center'; id?: string }> } | null>
+      onVisibleChatChanged(callback: (change: {service:WorkspaceService;observedAt:number}) => void): () => void
       listVocabulary(): Promise<import('./Vocabulary').Word[]>
       addVocabulary(input: { term: string; meaning: string }): Promise<void>
       reviewVocabulary(id: string, remembered: boolean): Promise<void>
-      getLearningProgress(): Promise<{ totalWords: number; reviewedWords: number; dueWords: number; reviewsToday: number; lessonsToday: number; lessonCompletedToday: boolean; studyStreak: number; aiRequestsToday: number; ollamaRequestsToday: number; chatgptRequestsToday: number }>
+      getLearningProgress(): Promise<{ totalWords: number; reviewedWords: number; dueWords: number; reviewsToday: number; lessonsToday: number; lessonCompletedToday: boolean; studyStreak: number; aiRequestsToday: number; chatgptRequestsToday: number }>
       completeDailyLesson(): Promise<boolean>
       getDataRetentionDays(): Promise<number>
       setDataRetentionDays(days: number): Promise<boolean>
       clearLocalData(): Promise<{ cleared: boolean; chatgptRevoked: boolean }>
       getPreferences(): Promise<{ theme: string; model: string; panelWidth: number }>
       setPreferences(input: { theme: string; model: string }): Promise<void>
+      getReasoningEffort(): Promise<import('../../shared/model-reasoning').ReasoningEffort>
+      setReasoningEffort(value: import('../../shared/model-reasoning').ReasoningEffort): Promise<import('../../shared/model-reasoning').ReasoningEffort>
+      getTranslationReasoningEffort(): Promise<import('../../shared/model-reasoning').ReasoningEffort>
+      setTranslationReasoningEffort(value: import('../../shared/model-reasoning').ReasoningEffort): Promise<import('../../shared/model-reasoning').ReasoningEffort>
+      getFastMode(): Promise<boolean>
+      setFastMode(enabled: boolean): Promise<boolean>
       clearVocabulary(): Promise<boolean>
       disconnectChatGPT(): Promise<{ revoked: boolean }>
       openChatGPTUsageSettings(): Promise<void>
       setMasking(enabled: boolean): Promise<void>
       allowCloud(): Promise<boolean>
       allowBackgroundCloud(): Promise<boolean>
-      chatgptModels(): Promise<{ slug: string; name: string }[]>
+      chatgptModels(): Promise<{ slug: string; name: string; reasoningEfforts?: import('../../shared/model-reasoning').ReasoningEffort[] }[]>
+      providerStatus(): Promise<{ geminiKeySet: boolean; remoteUrl: string; remoteTokenSet: boolean; geminiConsent: boolean; remoteConsent: boolean }>
+      setProviderSecrets(input: { geminiKey?: string; remoteUrl?: string; remoteToken?: string }): Promise<{ ok: boolean }>
+      setProviderConsent(provider: 'gemini' | 'remote', enabled: boolean): Promise<boolean>
+      providerModels(provider: 'gemini' | 'remote'): Promise<string[]>
+      setAlwaysOnTop(enabled: boolean): Promise<boolean>
       connectChatGPT(): Promise<{ connected: boolean; email: string | null; usageEnabled: boolean }>
+      connectChatGPTNewWorkspace(): Promise<{ connected: boolean; email: string | null; usageEnabled: boolean } | null>
       chatgptStatus(): Promise<{ connected: boolean; email: string | null; usageEnabled: boolean }>
-      listModels(): Promise<string[]>
-      runAi(task: string, text: string, model: string, requestId?: string): Promise<unknown>
+      startMeeting(model:string):Promise<string|null>
+      readMeeting(token:string):Promise<{diagnostics?:{captionMarkers:string[];iframeCount:number};session:string|null;segments:Array<{id:string;text:string;speaker:string;timestamp:number}>}>
+      stopMeeting(token:string):Promise<void>
+      translateMeeting(token:string,text:string,id:string):Promise<{translation:string}>
+      writeClipboardText(text: string): Promise<boolean>
+      runAi(task: string, text: string, model: string, requestId?: string, options?: {replyFast:boolean}): Promise<unknown>
+      onAiStream(requestId: string, callback: (delta: string) => void): () => void
       cancelAi(requestId: string): Promise<boolean>
     }
   }
 }
 
 function App() {
-  const [online, setOnline] = React.useState(navigator.onLine)
-  const [section, setSection] = React.useState('Tổng quan')
-  const [activeService, setActiveService] = React.useState<WorkspaceService | null>(null)
+  const [unread,setUnread]=React.useState<UnreadCounts>({whatsapp:0,teams:0,zalo:0,outlook:0})
+  React.useEffect(()=>{
+    let alive=true,updated=false
+    const stop=window.lingua.onWorkspaceUnread(counts=>{updated=true;if(alive)setUnread(counts)})
+    void window.lingua.getWorkspaceUnread().then(counts=>{if(alive&&!updated)setUnread(counts)}).catch(()=>{})
+    return()=>{alive=false;stop()}
+  },[])
+  const badge=(service:'whatsapp'|'teams'|'zalo'|'outlook')=><WorkspaceUnreadBadge value={unread[service]}/>
+  const [activeService, setActiveService] = React.useState<UiService>('whatsapp')
+  const operation=React.useRef(0)
   const [fallbackService, setFallbackService] = React.useState<WorkspaceService | null>(null)
-  const [panelWidth, setPanelWidth] = React.useState(360)
+  const [panelWidth, setPanelWidth] = React.useState(400)
   const [panelCollapsed, setPanelCollapsed] = React.useState(false)
-  const [status, setStatus] = React.useState('Chọn không gian làm việc')
+  const [showTasks,setShowTasks]=React.useState(false)
+  const [status, setStatus] = React.useState('Đang mở WhatsApp…')
+  const [online, setOnline] = React.useState(navigator.onLine)
   const resizing = React.useRef(false)
 
   React.useEffect(() => {
-    const update = () => setOnline(navigator.onLine)
-    window.addEventListener('online', update)
-    window.addEventListener('offline', update)
+    const refresh = () => setOnline(navigator.onLine)
+    window.addEventListener('online', refresh)
+    window.addEventListener('offline', refresh)
     return () => {
-      window.removeEventListener('online', update)
-      window.removeEventListener('offline', update)
+      window.removeEventListener('online', refresh)
+      window.removeEventListener('offline', refresh)
     }
   }, [])
 
   React.useEffect(() => {
-    void window.lingua.getPreferences().then(preferences => setPanelWidth(preferences.panelWidth)).catch(() => {})
+    void window.lingua.getPreferences().then(preferences => {
+      setPanelWidth(preferences.panelWidth)
+      document.documentElement.dataset.theme = preferences.theme
+      document.documentElement.lang = 'vi'
+    }).catch(() => {})
   }, [])
 
   const updatePanelWidth = (clientX: number, persist: boolean) => {
@@ -83,111 +135,101 @@ function App() {
     window.lingua.setWorkspacePanelLayout(panelWidth, panelCollapsed, false)
   }, [panelWidth, panelCollapsed])
 
+  const [zaloPc,setZaloPc]=React.useState<{ installed: boolean; running: boolean; connected: boolean; embedded?: boolean } | null>(null)
+  const openZaloPc = React.useCallback(async () => {
+    ++operation.current
+    setActiveService('zalopc')
+    setFallbackService(null)
+    window.dispatchEvent(new Event('linguahub:workspace'))
+    window.dispatchEvent(new CustomEvent('linguahub:service',{detail:'zalopc'}))
+    setStatus('Zalo PC')
+    try { setZaloPc(await window.lingua.openZaloPc()) } catch { setStatus('Chưa kiểm tra được Zalo PC.') }
+  }, [])
   const open = React.useCallback(async (service: WorkspaceService) => {
-    setSection('')
+    const current=++operation.current
     setActiveService(service)
     setFallbackService(null)
     window.dispatchEvent(new Event('linguahub:workspace'))
-    setStatus('Đang tải trang chính thức…')
+    window.dispatchEvent(new CustomEvent('linguahub:service',{detail:service}))
+    setShowTasks(false)
+    setStatus(service === 'whatsapp' ? 'Đang mở WhatsApp…' : service==='zalo'?'Đang mở Zalo Web…':service==='outlook'?'Đang mở Outlook…':'Đang mở Teams…')
     try {
-      const result = await window.lingua.openWorkspace(service)
-      setStatus(result.title)
+      await window.lingua.openWorkspace(service)
+      if(current!==operation.current)return
+      setStatus('Đã mở trang trò chuyện')
     } catch {
+      if(current!==operation.current)return
       setFallbackService(service)
-      setStatus('Website chưa tải được trong app. Có thể mở bằng trình duyệt mặc định; trợ lý vẫn dùng được.')
+      setStatus('Không mở được trang trong ứng dụng.')
     }
   }, [])
 
+  React.useEffect(() => {
+    void open('whatsapp')
+  }, [open])
+
   const reload = React.useCallback(async () => {
-    if (!activeService) {
-      setStatus('Anh mở WhatsApp hoặc Microsoft Teams trước.')
-      return
-    }
+    if(activeService==='zalopc'){try{setZaloPc(await window.lingua.zaloPcStatus())}catch{}return}
     window.dispatchEvent(new Event('linguahub:workspace'))
-    setStatus('Đang tải lại…')
+    setStatus('Đang tải lại trang…')
     try {
-      const result = await window.lingua.reloadWorkspace()
+      await window.lingua.reloadWorkspace()
       setFallbackService(null)
-      setStatus(result.title)
+      setStatus('Đã tải lại trang')
     } catch {
       setFallbackService(activeService)
-      setStatus('Không tải lại được. Anh có thể mở website trong trình duyệt ngoài app.')
+      setStatus('Không thể tải lại trang.')
     }
   }, [activeService])
+
+  React.useEffect(() => window.lingua.onShortcut(action => {
+    if (action === 'whatsapp' || action === 'teams' || action==='zalo' || action==='outlook') void open(action)
+    else if (action === 'dashboard') void open('whatsapp')
+    else if (action === 'reload') void reload()
+  }), [open, reload])
 
   const openFallback = async () => {
     if (!fallbackService) return
     try {
       await window.lingua.openExternal(fallbackService)
-      setStatus('Đã mở website trong trình duyệt mặc định · trợ lý vẫn dùng được')
+      setStatus('Đã mở trang trong trình duyệt mặc định.')
     } catch {
       setStatus('Không mở được trình duyệt mặc định.')
     }
   }
 
-  const showDashboard = React.useCallback(async () => {
-    try {
-      await window.lingua.showDashboard()
-      window.dispatchEvent(new Event('linguahub:dashboard'))
-      setActiveService(null)
-      setFallbackService(null)
-      setSection('Tổng quan')
-      setStatus('Chọn WhatsApp hoặc Microsoft Teams')
-    } catch {
-      setStatus('Không mở được tổng quan.')
-    }
-  }, [])
-
-  React.useEffect(() => window.lingua.onShortcut(action => {
-    if (action === 'whatsapp' || action === 'teams') void open(action)
-    else if (action === 'dashboard') void showDashboard()
-    else if (action === 'reload') void reload()
-  }), [open, reload, showDashboard])
-
-  const navigation = ['Dịch trực tiếp', 'Trả lời AI', 'English Coach', 'Từ vựng', 'Luyện nói', 'Cài đặt']
-
-  return <div className="app">
-    <aside>
-      <div className="brand">◈ LinguaHub <small>AI PRO</small></div>
-      <p>KHÔNG GIAN LÀM VIỆC</p>
-      <button onClick={() => void open('whatsapp')}>◉ WhatsApp</button>
-      <button onClick={() => void open('teams')}>▦ Microsoft Teams</button>
-      <p>HỖ TRỢ TIẾNG ANH</p>
-      <button className="nav" aria-current={section === 'Tổng quan' ? 'page' : undefined} onClick={() => void showDashboard()}>⌂ Tổng quan</button>
-      {navigation.map(item => <button className="nav" aria-current={section === item ? 'page' : undefined} key={item} onClick={() => setSection(item)}>{item}</button>)}
-      <footer>Ctrl+0: Tổng quan · Ctrl+1: WhatsApp · Ctrl+2: Teams · Ctrl+R: tải lại.</footer>
-    </aside>
-    <main>
-      <header>
-        <b>{activeService === 'whatsapp' ? 'WhatsApp' : activeService === 'teams' ? 'Microsoft Teams' : 'Tổng quan'}</b>
-        <span>{online ? status : 'Đang ngoại tuyến'}</span>
-        {fallbackService ? <button style={{ width: 'auto' }} onClick={() => void openFallback()}>Mở {fallbackService === 'whatsapp' ? 'WhatsApp' : 'Teams'} ngoài app</button> : null}
-        <button style={{ width: 'auto' }} disabled={!activeService} onClick={() => void reload()}>Tải lại</button>
-      </header>
-      {activeService ? null : <section className="dashboard-home">
-        <div className="dashboard-eyebrow">LINGUAHUB AI PRO</div>
-        <h1>Tiếng Anh tự tin hơn.<br />Công việc liền mạch hơn.</h1>
-        <p>Mở một không gian để tiếp tục trò chuyện. Phiên đăng nhập được giữ riêng cho từng dịch vụ.</p>
-        <div className="dashboard-cards">
-          <article className="dashboard-card"><h2>◉ WhatsApp</h2><p>Mở WhatsApp Web đã đăng nhập trong app.</p><button onClick={() => void open('whatsapp')}>Mở WhatsApp</button></article>
-          <article className="dashboard-card"><h2>▦ Microsoft Teams</h2><p>Mở Microsoft Teams trong phiên riêng của app.</p><button onClick={() => void open('teams')}>Mở Teams</button></article>
+  return <div className="app" lang="vi">
+    <header className="topbar">
+      <div className="topbar-brand"><span className="brand-mark">VI</span><span>LinguaHub <small>AI</small></span></div>
+      <nav className="workspace-tabs" aria-label="Chọn ứng dụng trò chuyện">
+        <button type="button" className={activeService === 'whatsapp' ? 'workspace-tab active' : 'workspace-tab'} aria-current={activeService === 'whatsapp' ? 'page' : undefined} onClick={() => void open('whatsapp')}>WhatsApp{badge('whatsapp')}</button>
+        <button type="button" className={activeService === 'teams' ? 'workspace-tab active' : 'workspace-tab'} aria-current={activeService === 'teams' ? 'page' : undefined} onClick={() => void open('teams')}>Microsoft Teams{badge('teams')}</button>
+        <button type="button" className={activeService==='zalo'?'workspace-tab active':'workspace-tab'} aria-current={activeService==='zalo'?'page':undefined} onClick={()=>void open('zalo')}>Zalo Web{badge('zalo')}</button>
+        <button type="button" className={activeService==='zalopc'?'workspace-tab active':'workspace-tab'} aria-current={activeService==='zalopc'?'page':undefined} onClick={()=>void openZaloPc()}>Zalo PC</button>
+        <button type="button" className={activeService==='outlook'?'workspace-tab active':'workspace-tab'} aria-current={activeService==='outlook'?'page':undefined} onClick={()=>void open('outlook')}>Outlook {badge('outlook')}</button>
+        <button type="button" className={showTasks?'workspace-tab active':'workspace-tab'} onClick={async()=>{await window.lingua.showDashboard();window.dispatchEvent(new Event('linguahub:dashboard'));setShowTasks(true)}}>Công việc</button>
+      </nav>
+      <div className="topbar-actions">
+        <button type="button" className="icon-button" title="Thu gọn xuống khay hệ thống" aria-label="Thu gọn xuống khay hệ thống" onClick={()=>void window.lingua.hideToTray().catch(()=>setStatus('Chưa thu gọn được xuống khay hệ thống.'))}>▁</button>
+        <span className={online ? 'connection-status' : 'connection-status offline'} title={status}>{online ? status : 'Máy đang ngoại tuyến'}</span>
+        <button type="button" className="icon-button" title="Tải lại trang trò chuyện" aria-label="Tải lại trang" onClick={() => void reload()}>↻</button>
+        <button type="button" className="icon-button" title="Cài đặt" aria-label="Cài đặt" onClick={() => { if (panelCollapsed) setPanelCollapsed(false); window.dispatchEvent(new Event('linguahub:settings')) }}>⚙</button>
+        <button type="button" className="icon-button" title={panelCollapsed ? 'Mở bản dịch' : 'Thu gọn bản dịch'} aria-label={panelCollapsed ? 'Mở bản dịch' : 'Thu gọn bản dịch'} onClick={() => setPanelCollapsed(value => !value)}>{panelCollapsed ? '▤' : '◧'}</button>
+      </div>
+    </header>
+    <div className="workspace-row">
+      <main className="workspace" aria-label="Trang trò chuyện">
+        {showTasks&&<TasksPanel service={activeService} onClose={()=>{setShowTasks(false);void open(activeService==='zalopc'?'whatsapp':activeService)}}/>}
+        {!showTasks&&activeService==='zalopc'&&<ZaloPcPane initial={zaloPc} />}
+        {fallbackService ? <div className="workspace-fallback"><h2>Chưa mở được trang trò chuyện</h2><p>Trang này có thể không hỗ trợ chạy bên trong ứng dụng. Anh có thể mở bằng trình duyệt.</p><button onClick={() => void openFallback()}>Mở bằng trình duyệt</button></div> : <div className="workspace-placeholder">Đang mở trang trò chuyện…</div>}
+      </main>
+      {!panelCollapsed && <div className="panel-resizer" role="separator" aria-label="Kéo để điều chỉnh độ rộng bản dịch" aria-orientation="vertical" onPointerDown={event => { resizing.current = true; event.currentTarget.setPointerCapture(event.pointerId) }} onPointerMove={event => { if (resizing.current) updatePanelWidth(event.clientX, false) }} onPointerUp={event => { if (resizing.current) { resizing.current = false; updatePanelWidth(event.clientX, true) } }} onLostPointerCapture={() => { resizing.current = false }} />}
+      <aside className={panelCollapsed ? 'panel panel-collapsed' : 'panel'} style={{width: panelCollapsed ? 56 : panelWidth}} aria-label="Trợ lý dịch tiếng Việt">
+        {panelCollapsed && <button className="expand-panel" title="Mở bản dịch" aria-label="Mở bản dịch" onClick={() => setPanelCollapsed(false)}>›</button>}
+        <div className={panelCollapsed ? 'panel-body panel-body-hidden' : 'panel-body'} aria-hidden={panelCollapsed}>
+          <AiPanel />
         </div>
-        <p className="dashboard-help">Dịch trực tiếp, trả lời AI và công cụ học tiếng Anh nằm ở thanh bên.</p>
-      </section>}
-    </main>
-    {panelCollapsed ? null : <div
-      className="panel-resizer"
-      role="separator"
-      aria-label="Điều chỉnh chiều rộng trợ lý"
-      aria-orientation="vertical"
-      onPointerDown={event => { resizing.current = true; event.currentTarget.setPointerCapture(event.pointerId) }}
-      onPointerMove={event => { if (resizing.current) updatePanelWidth(event.clientX, false) }}
-      onPointerUp={event => { if (resizing.current) { resizing.current = false; updatePanelWidth(event.clientX, true) } }}
-    />}
-    <div className={`panel${panelCollapsed ? ' panel-collapsed' : ''}`} style={{ width: panelCollapsed ? 52 : panelWidth }}>
-      {panelCollapsed
-        ? <button className="expand-panel" aria-label="Mở trợ lý" title="Mở trợ lý ngôn ngữ" onClick={() => setPanelCollapsed(false)}>‹</button>
-        : <><button className="collapse-panel" onClick={() => setPanelCollapsed(true)}>Thu gọn trợ lý</button><AiPanel section={section} /></>}
+      </aside>
     </div>
   </div>
 }

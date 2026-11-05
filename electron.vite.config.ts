@@ -10,7 +10,12 @@ export default defineConfig({
   },
   preload: {
     plugins: [externalizeDepsPlugin()],
-    build: { rollupOptions: { output: { format: 'cjs', entryFileNames: 'index.cjs' } } },
+    build: {
+      rollupOptions: {
+        input: { index: resolve('src/preload/index.ts'), 'chat-view': resolve('src/preload/chat-view.ts') },
+        output: { format: 'cjs', entryFileNames: '[name].cjs' },
+      },
+    },
   },
   renderer: {
     root: resolve('src/renderer'),

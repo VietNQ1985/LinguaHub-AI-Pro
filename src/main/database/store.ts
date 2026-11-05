@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { vocabulary, appSettings, activity } from './schema'
+import { DEFAULT_REASONING_EFFORT, DEFAULT_TRANSLATION_REASONING_EFFORT, REASONING_EFFORTS } from '../../shared/model-reasoning'
 
 function localDayKey(timestamp: number) {
   const date=new Date(timestamp)
@@ -36,7 +37,48 @@ export async function createLearningStore(directory: string, wasmPath: string) {
     ensureHealthy()
     const rows = db.select().from(appSettings).all()
     const values = Object.fromEntries(rows.map(row => [row.key, row.value]))
-    return { whatsapp: values['notifications.whatsapp'] === 'true', teams: values['notifications.teams'] === 'true' }
+    return { whatsapp: values['notifications.whatsapp'] === 'true', teams: values['notifications.teams'] === 'true', zalo: values['notifications.zalo'] === 'true', outlook: values['notifications.outlook'] === 'true' }
+  }
+  const getManualCloudConsent = () => {
+    ensureHealthy()
+    return db.select().from(appSettings).where(eq(appSettings.key,'chatgpt.manualCloudConsent')).get()?.value === 'true'
+  }
+  // Explicit consent for sending text to Gemini or a self-hosted endpoint, kept separate from ChatGPT consent.
+  // Direct send asks for confirmation only when the user turned that on (default: send immediately).
+  const getSendConfirm = () => {
+    ensureHealthy()
+    return db.select().from(appSettings).where(eq(appSettings.key, 'chat.send.confirm')).get()?.value === 'true'
+  }
+  const setSendConfirm = (input: unknown) => {
+    ensureHealthy()
+    const enabled = z.boolean().parse(input)
+    db.insert(appSettings).values({key:'chat.send.confirm',value:String(enabled)}).onConflictDoUpdate({target:appSettings.key,set:{value:String(enabled)}}).run()
+    return enabled
+  }
+  const getProviderConsent = (provider: string) => {
+    ensureHealthy()
+    return db.select().from(appSettings).where(eq(appSettings.key, `providers.consent.${provider}`)).get()?.value === 'true'
+  }
+  const setProviderConsent = async (provider: unknown, enabled: unknown) => {
+    ensureHealthy()
+    const data = z.object({ provider: z.enum(['gemini','remote']), enabled: z.boolean() }).parse({ provider, enabled })
+    const key = `providers.consent.${data.provider}`
+    db.insert(appSettings).values({key,value:String(data.enabled)}).onConflictDoUpdate({target:appSettings.key,set:{value:String(data.enabled)}}).run()
+    await persist()
+    return data.enabled
+  }
+  // Per-meeting-app "remember my choice" for caption reading and device permissions.
+  const getMeetingRemember = (service: string) => {
+    ensureHealthy()
+    return db.select().from(appSettings).where(eq(appSettings.key,`meeting.remember.${service}`)).get()?.value === 'true'
+  }
+  const setMeetingRemember = async (service: unknown, enabled: unknown) => {
+    ensureHealthy()
+    const data = z.object({ service: z.enum(['teams','chat','mic','zalo','outlook-read','reviewed']), enabled: z.boolean() }).parse({ service, enabled })
+    const key = `meeting.remember.${data.service}`
+    db.insert(appSettings).values({key,value:String(data.enabled)}).onConflictDoUpdate({target:appSettings.key,set:{value:String(data.enabled)}}).run()
+    await persist()
+    return data.enabled
   }
   const readRetentionDays = () => {
     const value=db.select().from(appSettings).all().find(row=>row.key==='privacy.retentionDays')?.value
@@ -76,7 +118,6 @@ export async function createLearningStore(directory: string, wasmPath: string) {
       lessonCompletedToday:lessonsToday>0,
       studyStreak,
       aiRequestsToday:aiEventsToday.length,
-      ollamaRequestsToday:aiEventsToday.filter(item=>aiProvider(item)==='ollama').length,
       chatgptRequestsToday:aiEventsToday.filter(item=>aiProvider(item)==='chatgpt').length,
     }
   }
@@ -91,6 +132,21 @@ export async function createLearningStore(directory: string, wasmPath: string) {
   await persist()
   return {
     getNotificationPreferences,
+    getManualCloudConsent,
+    getMeetingRemember,
+    getProviderConsent,
+    getSendConfirm,
+    setSendConfirm,
+    setProviderConsent,
+    setMeetingRemember,
+    async setManualCloudConsent(input:unknown){
+      ensureHealthy()
+      const enabled=z.boolean().parse(input)
+      const key='chatgpt.manualCloudConsent'
+      db.insert(appSettings).values({key,value:String(enabled)}).onConflictDoUpdate({target:appSettings.key,set:{value:String(enabled)}}).run()
+      await persist()
+      return enabled
+    },
     getRetentionDays:readRetentionDays,
     async setRetentionDays(input:unknown){
       ensureHealthy()
@@ -107,12 +163,12 @@ export async function createLearningStore(directory: string, wasmPath: string) {
       return true
     },
     async recordAiUsage(provider:unknown,task:unknown){
-      const data=z.object({provider:z.enum(['ollama','chatgpt']),task:z.enum(['translate','translateMessages','reply','coach','summary','risks'])}).parse({provider,task})
+      const data=z.object({provider:z.enum(['chatgpt','gemini','remote']),task:z.enum(['translate','translateLatest','translateMessages','reply','replyFromChat','replyTranslationFromChat','coach','summary','risks','extractTasks'])}).parse({provider,task})
       await recordActivity('ai_request',data)
     },
     async setNotificationPreference(service: unknown, enabled: unknown) {
       ensureHealthy()
-      const data = z.object({ service: z.enum(['whatsapp','teams']), enabled: z.boolean() }).parse({service,enabled})
+      const data = z.object({ service: z.enum(['whatsapp','teams','zalo','outlook']), enabled: z.boolean() }).parse({service,enabled})
       const key = `notifications.${data.service}`
       db.insert(appSettings).values({key,value:String(data.enabled)}).onConflictDoUpdate({target:appSettings.key,set:{value:String(data.enabled)}}).run()
       await persist()
@@ -123,7 +179,42 @@ export async function createLearningStore(directory: string, wasmPath: string) {
       const rows = db.select().from(appSettings).all()
       const values = Object.fromEntries(rows.map(row => [row.key, row.value]))
       const savedWidth=Number(values.panelWidth)
-      return { theme: values.theme === 'light' ? 'light' : 'dark', model: values.model || '', panelWidth:Number.isFinite(savedWidth)&&savedWidth>=280&&savedWidth<=560?savedWidth:360 }
+      return { theme: values.theme === 'dark' ? 'dark' : 'light', model: values.model || '', panelWidth:Number.isFinite(savedWidth)&&savedWidth>=280&&savedWidth<=560?savedWidth:360 }
+    },
+    getReasoningEffort() {
+      ensureHealthy()
+      const value=db.select().from(appSettings).where(eq(appSettings.key,'reasoningEffort')).get()?.value
+      return (REASONING_EFFORTS as readonly string[]).includes(value || '') ? value as typeof REASONING_EFFORTS[number] : DEFAULT_REASONING_EFFORT
+    },
+    async setReasoningEffort(input: unknown) {
+      ensureHealthy()
+      const reasoningEffort=z.enum(REASONING_EFFORTS).parse(input)
+      db.insert(appSettings).values({key:'reasoningEffort',value:reasoningEffort}).onConflictDoUpdate({target:appSettings.key,set:{value:reasoningEffort}}).run()
+      await persist()
+      return reasoningEffort
+    },
+    getTranslationReasoningEffort() {
+      ensureHealthy()
+      const value=db.select().from(appSettings).where(eq(appSettings.key,'translationReasoningEffort')).get()?.value
+      return (REASONING_EFFORTS as readonly string[]).includes(value || '') ? value as typeof REASONING_EFFORTS[number] : DEFAULT_TRANSLATION_REASONING_EFFORT
+    },
+    async setTranslationReasoningEffort(input: unknown) {
+      ensureHealthy()
+      const reasoningEffort=z.enum(REASONING_EFFORTS).parse(input)
+      db.insert(appSettings).values({key:'translationReasoningEffort',value:reasoningEffort}).onConflictDoUpdate({target:appSettings.key,set:{value:reasoningEffort}}).run()
+      await persist()
+      return reasoningEffort
+    },
+    getFastMode() {
+      ensureHealthy()
+      return db.select().from(appSettings).where(eq(appSettings.key,'fastMode')).get()?.value === 'true'
+    },
+    async setFastMode(input: unknown) {
+      ensureHealthy()
+      const enabled=z.boolean().parse(input)
+      db.insert(appSettings).values({key:'fastMode',value:String(enabled)}).onConflictDoUpdate({target:appSettings.key,set:{value:String(enabled)}}).run()
+      await persist()
+      return enabled
     },
     async setPreferences(input: unknown) {
       ensureHealthy()

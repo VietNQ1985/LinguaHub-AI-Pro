@@ -1,6 +1,8 @@
-export type WorkspaceService = 'whatsapp' | 'teams'
+export type WorkspaceService = 'whatsapp' | 'teams' | 'zalo' | 'outlook'
 
 const notificationHosts: Record<WorkspaceService, ReadonlySet<string>> = {
+  outlook: new Set(['outlook.office.com','outlook.office365.com','outlook.cloud.microsoft']),
+  zalo: new Set(['chat.zalo.me']),
   whatsapp: new Set(['web.whatsapp.com']),
   teams: new Set(['teams.microsoft.com', 'teams.cloud.microsoft']),
 }

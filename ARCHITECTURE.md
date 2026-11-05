@@ -2,26 +2,30 @@
 
 ## Ranh giới tiến trình
 
-Main process quản lý `BrowserWindow`, `WebContentsView`, IPC, SQLite và kết nối AI. Renderer React không có Node integration; preload chỉ công bố các thao tác cụ thể. WhatsApp và Teams dùng hai profile Chromium riêng, persistent, sandbox và context isolation; website không nhận preload của app. Main process kiểm tra IPC theo sender/frame và giới hạn điều hướng theo HTTPS/domain.
+Main process quản lý `BrowserWindow`, hai `WebContentsView`, IPC, SQLite và AI. Renderer React không có Node integration; preload chỉ công bố các hàm cụ thể. WhatsApp và Teams dùng profile Chromium riêng, persistent, sandbox và context isolation. Main xác thực sender/frame của IPC và giới hạn điều hướng theo HTTPS/domain.
 
-## Website
+## Đọc chat hiển thị
 
-Hai `WebContentsView` giữ sống khi chuyển dịch vụ hoặc ẩn ở màn hình **Tổng quan**; profile đăng nhập không bị hủy. Về Tổng quan sẽ dừng OCR và thu hồi đồng ý cloud OCR trong phiên. Chiều rộng panel trợ lý được lưu, kéo giãn và thu gọn; main process cập nhật bounds view theo layout. Reload giữ đúng dịch vụ đang mở. Notification permission chỉ được hỏi riêng cho origin WhatsApp/Teams và chỉ được cấp theo lựa chọn người dùng. Chromium Web Notifications là đường gửi toast; app đặt AppUserModelID/ToastActivatorCLSID ổn định và sửa shortcut Start Menu khi chạy bản đóng gói; vẫn cần phép thử bằng tin nhắn thật. Liên kết popup HTTPS công khai phải được người dùng xác nhận trước khi mở ngoài app. Không có tray nên đóng hẳn app sẽ dừng notification web.
+Khi người dùng bật dịch và chấp thuận, main process chạy một script đọc cố định trong `WebContentsView` đang hoạt động bằng `webContents.executeJavaScript`. Script chỉ truy vấn các selector của vùng chat, lọc bong bóng nhìn thấy trong viewport, lấy chữ và hướng trái/phải; nó không chụp ảnh, sửa DOM, đọc cookie hay gửi tin nhắn. Mỗi lần quét giới hạn tối đa 60 tin và 4.000 ký tự/tin. Tên hội thoại chỉ được dùng cục bộ để băm thành tín hiệu đổi cuộc trò chuyện; không đưa vào payload AI.
+
+Renderer đợi chữ ổn định qua hai lần đọc, chống trùng, hủy batch khi đổi hội thoại, giới hạn kích thước request và cache bản dịch theo model/nội dung trong bộ nhớ. AI tự nhận diện ngôn ngữ; dịch tiếng Anh sang tiếng Việt và trả kết quả rỗng với ngôn ngữ khác. Selector WhatsApp/Teams không phải API ổn định; kiểm thử tự động dùng DOM tổng hợp, chưa kiểm chứng trên trang thật sau thay đổi.
+
+Đọc cục bộ cần một xác nhận riêng. Gửi tin nhắn hiển thị qua ChatGPT cần xác nhận cloud thứ hai; Ollama dùng endpoint cố định `127.0.0.1:11434`. Dừng dịch thu hồi hai quyền trong phiên và hủy yêu cầu đang chạy. Khi cửa sổ bị ẩn/thu nhỏ hoặc view không hoạt động, main không đọc. Che email/số điện thoại là heuristic, có thể bỏ sót hoặc che nhầm.
+
+## Website và thông báo
+
+Hai `WebContentsView` giữ sống khi chuyển dịch vụ hoặc ẩn ở màn hình **Tổng quan**; profile đăng nhập không bị hủy. Chiều rộng panel được lưu, kéo giãn và thu gọn; main cập nhật bounds view theo layout. Notification permission chỉ được hỏi riêng cho origin WhatsApp/Teams và chỉ được cấp theo lựa chọn người dùng. Chromium Web Notifications là đường gửi toast; app đặt AppUserModelID/ToastActivatorCLSID và sửa shortcut Start Menu khi chạy bản đóng gói. Chưa xác nhận thông báo do website phát bằng tin nhắn thật. Không có tray nên đóng app sẽ dừng thông báo web.
 
 ## AI
 
-Ollama gọi endpoint cố định `127.0.0.1:11434`. ChatGPT dùng OAuth PKCE qua system browser và callback loopback, ID token được xác minh bằng JWKS/issuer/audience/nonce. `ext_agent_host_id` ổn định; issued client ID được lưu trước khi đổi authorization code và tái sử dụng. Access token gần hết hạn được làm mới theo form OAuth; refresh được serialize trong một tiến trình, ID token mới (nếu có) được xác minh cùng subject, token xoay được ghi mã hóa bằng Electron safeStorage. Thu hồi refresh token được thử trước khi xóa local token và retry khi lỗi mạng/5xx. Dùng model catalog theo tài khoản; Responses API chạy `store=false`, `stream=true` và chỉ chấp nhận `response.completed`.
+ChatGPT dùng OAuth PKCE qua trình duyệt hệ thống và callback loopback, ID token được xác minh bằng JWKS/issuer/audience/nonce. Token được mã hóa bằng Electron safeStorage, làm mới theo hạn và thu hồi khi người dùng ngắt kết nối. Model catalog theo quyền tài khoản; Responses API chạy `store=false`, `stream=true`. Không dùng API key.
 
-Kết quả AI được kiểm tra bằng Zod. Reply yêu cầu đủ ba kiểu riêng biệt; tóm tắt/cảnh báo và gợi ý theo dõi phải có dẫn chứng khớp nguyên văn. Câu OCR có thể chuyển sang English Coach. Đây chỉ là kiểm tra cấu trúc và dẫn chứng, không chứng minh mọi suy luận AI chính xác. Nội dung nhập tay dùng ChatGPT sau một xác nhận; dịch OCR nền cần quyền riêng trong phiên app. Gói Plus chia sẻ hạn mức với các app khác. Hồ sơ SIWC và model catalog đã được xác minh thật; inference hiện dừng vì quota chia sẻ, refresh/thu hồi thật vẫn chưa kiểm chứng. Che email/số điện thoại là heuristic và có thể bỏ sót hoặc che nhầm số nghiệp vụ.
+Kết quả AI được kiểm tra bằng Zod. Gợi ý trả lời yêu cầu đủ ba kiểu; tóm tắt/cảnh báo và gợi ý theo dõi phải có dẫn chứng khớp nguyên văn. Kiểm tra cấu trúc không chứng minh mọi kết luận AI chính xác. Tình trạng inference ChatGPT phụ thuộc quota dùng chung của tài khoản.
 
-## OCR
+Composer giữ riêng câu tiếng Việt, bản xem trước tiếng Anh, nguồn ngữ cảnh và trạng thái sửa tay. Tác vụ dịch câu trả lời truyền tối đa 20 tin gần nhất, giọng điệu và bản nháp; reasoning dùng cấu hình dành riêng cho dịch. Thay hội thoại hủy request đang chờ và khóa sao chép bản xem trước gắn với hội thoại cũ. UI chỉ cung cấp sao chép; không có IPC chèn/gửi tin vì adapter hiện chưa thể ràng buộc người nhận và xác minh kết quả.
 
-Sau xác nhận, main dùng `capturePage` lấy ảnh vùng `WebContentsView` đang hiển thị rồi cắt theo vùng người dùng chỉnh. Renderer chạy Tesseract trong Chromium Web Worker; worker và core lấy từ tài nguyên cục bộ của bản cài. Ảnh không lưu/gửi cloud. Chữ OCR được dịch bằng Ollama cục bộ; nếu chọn ChatGPT, app hiện hộp thoại đồng ý riêng trước khi gửi chữ nhận dạng đến OpenAI. Mỗi yêu cầu ChatGPT dạng `translateMessages` bị chặn nếu chưa có quyền nền; dừng OCR sẽ thu hồi quyền nền trong phiên và hủy worker. Kết quả Tesseract được nhóm theo tọa độ dòng, vùng đầu dùng làm nhãn hội thoại để tạo fingerprint cục bộ; tin mới phải ổn định hai lần. Có cache theo model/nội dung, giới hạn kích thước batch, hủy khi đổi workspace/hội thoại và dừng khi cửa sổ ẩn/thu nhỏ. Worker/core đã chạy trên ảnh tổng hợp trong tài nguyên bản cài; dấu sender và segmentation vẫn heuristic, chưa đo độ chính xác trên UI thật.
+## Dữ liệu và phát hành
 
-## Dữ liệu
+SQLite qua sql.js/Drizzle lưu từ vựng, lịch ôn, tiến độ, lượt AI theo provider/task, tùy chọn thông báo, theme/model, chiều rộng panel và kỳ hạn lưu. Thống kê không chứa prompt/nội dung chat. Chat không tự lưu. Log chỉ dùng mã sự kiện cố định, không ghi URL/chat/token. Cookie đăng nhập website do Chromium quản lý trong từng profile.
 
-SQLite qua sql.js/Drizzle lưu từ vựng, lịch ôn, event tiến độ, số lượt AI thành công theo provider/task, notification preferences, theme/model, chiều rộng panel và kỳ hạn lưu. Thống kê AI không chứa prompt hoặc nội dung chat. Mặc định giữ dữ liệu học đến khi người dùng xóa; chọn 30/90/365 ngày sẽ hỏi xác nhận, rồi tự dọn dữ liệu cũ hơn. Nút xóa từ vựng xóa cả lịch sử học. Thao tác xóa toàn bộ cũng thử thu hồi ChatGPT, xóa thông tin đăng ký cục bộ và xóa dữ liệu hai profile web sau xác nhận. Nội dung chat không tự lưu. Bản thu luyện nói chỉ là Blob trong bộ nhớ renderer. Log chỉ dùng mã sự kiện cố định, không ghi URL/chat/token. Cookie website đăng nhập do Chromium quản lý trong từng profile.
-
-## Phát hành
-
-Script đóng gói sao chép out vào thư mục snapshot riêng trước khi electron-builder đọc. Bộ cài NSIS chưa có chữ ký số. SHA-256 được tạo sau khi đóng gói thành công. Các bản snapshot và release bị loại khỏi Git. Build thành công không thay thế kiểm thử cài đặt/gỡ và chạy thực tế.
+Script phát hành sao chép output vào thư mục snapshot trước khi electron-builder đọc. Bộ cài NSIS chưa ký số; SHA-256 được tạo sau khi đóng gói. Build thành công không thay thế kiểm thử cài đặt/gỡ và chạy thực tế.
