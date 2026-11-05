@@ -1,5 +1,4 @@
 import { MeetingTranslation } from './MeetingTranslation'
-import { EmailTranslation } from './EmailTranslation'
 import { ExternalProviders } from './ExternalProviders'
 import { WhisperTranslation } from './WhisperTranslation'
 import { stopReplyPlayback } from './SpeechPlayback'
@@ -379,7 +378,6 @@ export function AiPanel() {
     <div className="assistant-content">
       {/* Permissions live in Settings only; features still ask when a permission is needed. */}
       {service==='zalo'&&<ZaloCallBar />}
-      {service==='outlook' && mode==='translate' && <EmailTranslation key={service} model={model} />}
       {service!=='outlook' && <div className="meeting-modes" role="group" aria-label="Chế độ dịch"><button type="button" aria-pressed={!meetingMode&&!captionsMode} onClick={()=>{invalidateReply();setMeetingMode(false);setCaptionsMode(false)}} title="Dịch tin nhắn đang hiển thị">Tin nhắn</button><button type="button" disabled={!meetingCapable} aria-pressed={meetingMode&&!captionsMode} onClick={()=>{invalidateReply();setMeetingMode(true);setCaptionsMode(false)}} title="Dịch phụ đề có sẵn của Teams/Zoom/Meet">Cuộc họp</button><button type="button" aria-pressed={captionsMode} onClick={()=>{invalidateReply();setCaptionsMode(true)}} title="Nghe âm thanh trên máy và tạo phụ đề bằng Whisper">Phụ đề</button></div>}
       {meetingCapable&&!meetingMode&&!captionsMode&&<p className="meeting-hint">Đang ở chế độ dịch tin nhắn. Để đọc phụ đề khi họp: chọn <button type="button" onClick={()=>{invalidateReply();setMeetingMode(true)}}>Dịch cuộc họp</button>, bật phụ đề English trong {service==='zoom'?'Zoom':service==='meet'?'Google Meet':'Teams'} rồi bấm Bắt đầu dịch.</p>}
       {meetingMode&&!captionsMode&&mode==='translate'&&<MeetingTranslation model={model} service={service}/>}
@@ -388,13 +386,13 @@ export function AiPanel() {
 
       {/* Keep the translation component mounted: changing tabs or hiding the panel must not stop visible chat reading. */}
       {/* During a meeting the chat translation and reply suggestions stay below the spoken translation, so both run at once. */}
-      <div style={{ display: mode === 'translate' && chatCapable ? 'block' : 'none' }} aria-hidden={mode !== 'translate'}>
+      <div style={{ display: mode === 'translate' && (chatCapable||service==='outlook') ? 'block' : 'none' }} aria-hidden={mode !== 'translate'}>
         {(meetingMode||captionsMode)&&<h3 className="meeting-chat-title">Chat trong cuộc họp</h3>}
-        <LiveTranslation model={model} service={service} active={chatCapable} />
+        <LiveTranslation model={model} service={service} active={chatCapable||service==='outlook'} />
       </div>
 
       {/* One reply box: the Vietnamese text is either translated as written or used as the intent for 3 suggestions. */}
-      {mode==='translate'&&service!=='outlook'&&<section className="reply-composer" aria-labelledby="reply-composer-title">
+      {mode==='translate'&&<section className="reply-composer" aria-labelledby="reply-composer-title">
         <div className="composer-heading" title={chatCapable?'Dịch theo ngữ cảnh chat đang mở':'Dịch câu trả lời sang tiếng Anh'}>
           <h3 id="reply-composer-title">Trả lời</h3>
           <select id="reply-tone" className="tone-select" aria-label="Giọng điệu" value={replyTone} onChange={event=>{cancelActiveRequest();setReplyTone(event.target.value as ReplyTone)}}>
