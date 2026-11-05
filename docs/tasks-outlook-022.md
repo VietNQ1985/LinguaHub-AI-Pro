@@ -1,10 +1,12 @@
-# Công việc và Outlook 0.2.2
+# Công việc và Outlook 0.2.3
 
 ## Hành vi
 
-Tab Công việc nằm trên thanh ứng dụng. Khi mở, app giữ một bản nội dung của chat/email đã chọn nếu quyền đọc đã được cấp, cùng giờ lấy nguồn. Các webview chat được ẩn và bộ dịch tạm ngừng. Không đọc các tab đang ẩn. Quay lại ứng dụng để cập nhật nguồn; AI chỉ chạy khi người dùng bấm Tìm việc.
+Gợi ý công việc nằm ngay đầu panel của WhatsApp, Teams, Zalo Web và Outlook. Bấm **Gợi ý công việc** để phân tích chat/email đang hiển thị; chỉ nội dung đó được gửi đến mô hình đã chọn. Không có yêu cầu AI tự chạy khi có tin mới. Cùng nội dung, cùng mô hình chỉ được phân tích một lần cho mỗi lượt đang mở.
 
-Đề xuất cần trích dẫn khớp nguồn, được gộp theo tên, có Thêm/Bỏ. Chỉ Thêm mới lưu. Không tự đặt hạn từ ngôn ngữ mơ hồ. Danh sách có thêm nhanh, tìm kiếm, lọc nguồn, Hôm nay (gồm việc đến hạn và quá hạn), Quá hạn, Quan trọng, Đang làm, Đã xong. Chọn một việc mở khung chi tiết: ghi chú, checklist tối đa 30 bước, hạn hoàn thành và giờ nhắc riêng. Hoàn thành nhanh bằng checkbox; giữ được công việc 0.2.1.
+Đề xuất phải có trích dẫn khớp nguồn, được gộp theo tên, có **Thêm/Bỏ** ngay trong panel. Chỉ bấm Thêm mới lưu. Không tự đặt hạn từ ngôn ngữ mơ hồ. Đổi ứng dụng, chat hoặc nội dung sẽ hủy tác vụ còn chạy và xóa đề xuất cũ.
+
+Tab **Công việc** là nơi quản lý danh sách đã lưu: thêm nhanh, tìm kiếm, lọc nguồn, Hôm nay (gồm việc đến hạn và quá hạn), Quá hạn, Quan trọng, Đang làm, Đã xong. Chọn một việc mở khung chi tiết: ghi chú, checklist tối đa 30 bước, hạn hoàn thành và giờ nhắc riêng. Hoàn thành nhanh bằng checkbox; giữ được công việc 0.2.1.
 
 Nhắc hạn tiếp tục dùng SQLite và thông báo chung của 0.2.1: cần app chạy, hoạt động khi ẩn dưới khay; khi mở lại kiểm tra các nhắc chưa phát. Không chứa tiêu đề/trích dẫn công việc trên toast.
 

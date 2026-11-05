@@ -12,6 +12,7 @@ import { SpeechSettings } from './SpeechSettings'
 import { ZaloCallBar } from './ZaloCallBar'
 import { ChatGPTAccount } from './ChatGPTAccount'
 import { AdvancedSettings } from './AdvancedSettings'
+import { TaskSuggestions } from './TaskSuggestions'
 import { DEFAULT_CHATGPT_MODEL, DEFAULT_REASONING_EFFORT, DEFAULT_TRANSLATION_REASONING_EFFORT, isGpt6Model, REASONING_EFFORTS, type ReasoningEffort } from '../../shared/model-reasoning'
 
 type PanelMode = 'translate' | 'settings'
@@ -377,10 +378,10 @@ export function AiPanel({workspaceActive=true}:{workspaceActive?:boolean}) {
     </div>
 
     <div className="assistant-content">
-      {mode==='translate'&&<button type="button" className="task-capture-link" onClick={()=>window.dispatchEvent(new Event('linguahub:open-tasks'))}>＋ Lấy công việc từ {service==='outlook'?'email này':'chat này'}</button>}
       {/* Permissions live in Settings only; features still ask when a permission is needed. */}
       {service==='zalo'&&<ZaloCallBar />}
       <div className="meeting-modes" role="group" aria-label="Chế độ dịch"><button type="button" aria-pressed={!meetingMode&&!captionsMode} onClick={()=>{invalidateReply();setMeetingMode(false);setCaptionsMode(false)}} title="Dịch tin nhắn đang hiển thị">{service==='outlook'?'Email':'Tin nhắn'}</button><button type="button" disabled={!meetingCapable} aria-pressed={meetingMode&&!captionsMode} onClick={()=>{invalidateReply();setMeetingMode(true);setCaptionsMode(false)}} title="Dịch phụ đề có sẵn của Teams/Zoom/Meet">Cuộc họp</button><button type="button" aria-pressed={captionsMode} onClick={()=>{invalidateReply();setCaptionsMode(true)}} title="Nghe âm thanh trên máy và tạo phụ đề bằng Whisper">Phụ đề</button></div>
+      {mode === 'translate' && chatCapable && <TaskSuggestions service={service} model={replyAi} active={workspaceActive} />}
       {meetingCapable&&!meetingMode&&!captionsMode&&<p className="meeting-hint">Đang ở chế độ dịch tin nhắn. Để đọc phụ đề khi họp: chọn <button type="button" onClick={()=>{invalidateReply();setMeetingMode(true)}}>Dịch cuộc họp</button>, bật phụ đề English trong {service==='zoom'?'Zoom':service==='meet'?'Google Meet':'Teams'} rồi bấm Bắt đầu dịch.</p>}
       {meetingMode&&!captionsMode&&mode==='translate'&&<MeetingTranslation model={model} service={service}/>}
       {/* Always mounted so Whisper can be preloaded at startup; hidden unless this mode is chosen. */}
