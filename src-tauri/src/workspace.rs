@@ -24,6 +24,7 @@ pub fn read_script(service: &str) -> &'static str {
         "zoom" => include_str!("../page-scripts/read-zoom.js"),
         "meet" => include_str!("../page-scripts/read-meet.js"),
         "telegram" => include_str!("../page-scripts/read-telegram.js"),
+        "outlook" => include_str!("../page-scripts/read-outlook.js"),
         _ => include_str!("../page-scripts/read-zalo.js"),
     }
 }
@@ -141,8 +142,8 @@ pub fn conversation_id(service: &str, url: &str, snapshot: &Value) -> String {
 /// Reads the visible chat of the active service tab.
 pub async fn read_visible<R: Runtime>(app: &AppHandle<R>) -> anyhow::Result<Value> {
     let Some((service, webview)) = current_view(app) else { return Ok(Value::Null) };
-    // Outlook is a plain tab: mail is not read as chat.
-    if service == "outlook" || !window_visible(app) {
+    // Outlook only returns a currently visible reading pane; sign-in/inbox lists return empty.
+    if !window_visible(app) {
         return Ok(Value::Null);
     }
     let url = webview.url()?.to_string();
