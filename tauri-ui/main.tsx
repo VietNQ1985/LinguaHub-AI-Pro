@@ -8,6 +8,8 @@ type Msg = { id?: string; side: 'left' | 'right' | 'center'; text: string }
 type Snapshot = { conversationId: string; messages: Msg[]; service: Service }
 type Preferences = { theme: string; model: string; panelWidth: number; masking: boolean }
 type Suggestion = { style: string; vietnamese: string; english: string; explanation: string }
+type CaptionSegment = { id: string; text: string; speaker: string; timestamp: number }
+type CaptionResult = { session: string | null; segments: CaptionSegment[]; diagnostics?: {captionVisible?:boolean} }
 
 declare global {
   interface Window {
@@ -72,6 +74,9 @@ function App() {
   const [previewSettings, setPreviewSettings] = useState('')
   const [suggestions, setSuggestions] = useState<Suggestion[]>([])
   const [summary, setSummary] = useState('')
+  const [meetingActive, setMeetingActive] = useState(false)
+  const [captions, setCaptions] = useState<Array<CaptionSegment & {translation?:string}>>([])
+  const captionSeen = useRef(new Set<string>())
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState('Đang khởi động Tauri Rust…')
   const [error, setError] = useState('')
@@ -134,6 +139,39 @@ function App() {
   }, [refreshModels])
 
   useEffect(() => {
+    if (!meetingActive || service !== 'teams' || !authorized || !model) return
+    let closed = false, reading = false
+    const poll = async () => {
+      if (closed || reading) return
+      reading = true
+      try {
+        const payload = await call<CaptionResult>('read_meeting_captions')
+        const fresh = payload.segments.filter(seg => {
+          const key = String(payload.session||'')+':'+seg.id+':'+seg.text
+          if (captionSeen.current.has(key)) return false
+          captionSeen.current.add(key)
+          return true
+        }).slice(-2)
+        for (const segment of fresh) {
+          if (closed) break
+          setCaptions(current => [...current, segment].slice(-40))
+          try {
+            const translated = await call<{translation:string}>('ollama_ai', {
+              task:'translateLatest', text:segment.text, model,
+            })
+            if (!closed) setCaptions(current => current.map(item =>
+              item.id===segment.id && item.text===segment.text ? {...item,translation:translated.translation} : item))
+          } catch (err) {if (!closed) setError(errorText(err))}
+        }
+      } catch (err) {if (!closed) setError(errorText(err))}
+      finally {reading=false}
+    }
+    void poll()
+    const id = window.setInterval(() => void poll(), 3000)
+    return () => {closed=true;window.clearInterval(id)}
+  }, [meetingActive,service,authorized,model])
+
+  useEffect(() => {
     const sync = () => updateLayout()
     sync()
     window.addEventListener('resize', sync)
@@ -143,6 +181,7 @@ function App() {
   const changeService = async (next: Service) => {
     if (next === service) return
     invalidate()
+    if (next !== 'teams') setMeetingActive(false)
     setService(next)
     setError('')
     setStatus('Đang mở ' + SERVICES.find(s => s.id === next)?.name)
@@ -337,6 +376,15 @@ function App() {
                 {summary&&<div className="summary">{summary}</div>}
                 {!snapshot&&<p className="hint">Bấm “Dịch tin mới” sau khi mở cuộc trò chuyện. Không tự động gửi nội dung lên AI.</p>}
               </section>
+              {service==='teams'&&<section className="card">
+                <div className="card-heading"><h3>Phụ đề cuộc họp Teams</h3><span>Thử nghiệm</span></div>
+                <p className="hint">Mở meeting và bật phụ đề trong Teams. Chỉ đọc phụ đề đang hiển thị; không ghi âm.</p>
+                <Button onClick={()=>{captionSeen.current.clear();setCaptions([]);setMeetingActive(value=>!value)}}
+                  disabled={!authorized||!model}>{meetingActive?'Dừng dịch phụ đề':'Bật dịch phụ đề trực tiếp'}</Button>
+                {captions.length>0&&<div className="messages">{captions.map((seg,index)=><div className="message" key={seg.id+'-'+index}>
+                  <strong>{seg.speaker || 'Speaker'}</strong><div>{seg.text}</div><div className="translated">{seg.translation || 'Đang dịch…'}</div>
+                </div>)}</div>}
+              </section>}
               <section className="card">
                 <div className="card-heading"><h3>Soạn câu trả lời</h3><span>Việt → Anh</span></div>
                 <label htmlFor="draft">Câu trả lời tiếng Việt</label>
