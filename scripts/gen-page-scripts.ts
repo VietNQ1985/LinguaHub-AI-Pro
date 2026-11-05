@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { build } from 'vite'
 import { buildVisibleChatReadScript, type ChatService } from '../src/page-scripts/chat-dom-reader'
+import { buildOutlookReadScript } from '../src/page-scripts/outlook-mail-reader'
 import { buildComposerScript } from '../src/page-scripts/chat-sender'
 import { meetingCaptionScript } from '../src/page-scripts/meeting-captions'
 import { ERP_GLOSSARY, ERP_GLOSSARY_PROMPT } from '../src/shared/erp-glossary'
@@ -21,6 +22,7 @@ for (const service of services) {
   write(`composer-${service}.js`, buildComposerScript(service, false))
   write(`composer-${service}-focus.js`, buildComposerScript(service, true))
 }
+write('read-outlook.js', buildOutlookReadScript())
 for (const service of ['teams', 'zoom', 'meet'] as const) write(`captions-${service}.js`, meetingCaptionScript(service))
 
 write('zalopc-call-voice.js', buildCallScript('voice'))
