@@ -44,3 +44,44 @@ test('captured task source does not read hidden workspaces and saves only a sele
   expect(save.mock.calls[0][0].source.evidence).toBe('Review invoice')
  }finally{await act(async()=>root.unmount());dom.window.close();vi.unstubAllGlobals()}
 })
+
+test('batch add all proposals saves multiple task items',async()=>{
+ const dom=new JSDOM('<div id="root"></div>');vi.stubGlobal('window',dom.window);vi.stubGlobal('document',dom.window.document);vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT',true)
+ const save=vi.fn(async v=>({...v,id:'saved-'+Math.random()}))
+ Object.assign(dom.window,{lingua:{listTasks:async()=>[],allowCloud:async()=>true,cancelAi:async()=>true,saveTask:save,runAi:async()=>({actions:[{text:'Việc 1',evidence:'Việc 1',deadline:null},{text:'Việc 2',evidence:'Việc 2',deadline:null}]})}})
+ const root=createRoot(dom.window.document.querySelector('#root')!)
+ try{
+  await act(async()=>root.render(createElement(WorkTasks,{service:'teams',model:'chatgpt:test',sourceSnapshot:{conversationId:'c-1',text:'Việc 1 và Việc 2',messages:[],service:'teams',capturedAt:Date.now()}})))
+  const find=(name:string)=>Array.from(dom.window.document.querySelectorAll('button')).find(b=>b.textContent?.includes(name))!
+  await act(async()=>find('Tìm việc trong chat/email').click())
+  const addAll=find('Thêm tất cả')
+  expect(addAll).toBeTruthy()
+  await act(async()=>addAll.click())
+  expect(save).toHaveBeenCalledTimes(2)
+ }finally{await act(async()=>root.unmount());dom.window.close();vi.unstubAllGlobals()}
+})
+
+test('standup report button generates markdown and copies to clipboard',async()=>{
+ const dom=new JSDOM('<div id="root"></div>');vi.stubGlobal('window',dom.window);vi.stubGlobal('document',dom.window.document);vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT',true)
+ const writeClipboardText=vi.fn(async()=>true)
+ const sampleTasks=[
+  {id:'1',title:'Hoàn thành slide báo cáo',status:'done' as const,remindAt:null},
+  {id:'2',title:'Họp dự án với khách hàng',status:'doing' as const,remindAt:null,dueAt:Date.now()+100000},
+  {id:'3',title:'Gửi email cho đối tác',status:'todo' as const,remindAt:null}
+ ]
+ Object.assign(dom.window,{lingua:{listTasks:async()=>sampleTasks,writeClipboardText,cancelAi:async()=>true}})
+ const root=createRoot(dom.window.document.querySelector('#root')!)
+ try{
+  await act(async()=>root.render(createElement(WorkTasks,{service:'whatsapp',model:'local'})))
+  const exportBtn=Array.from(dom.window.document.querySelectorAll('button')).find(b=>b.textContent?.includes('Sao chép báo cáo'))!
+  expect(exportBtn).toBeTruthy()
+  await act(async()=>exportBtn.click())
+  expect(writeClipboardText).toHaveBeenCalledTimes(1)
+  const copiedText=(writeClipboardText.mock.calls as string[][])[0][0]
+  expect(copiedText).toContain('BÁO CÁO CÔNG VIỆC')
+  expect(copiedText).toContain('ĐÃ HOÀN THÀNH')
+  expect(copiedText).toContain('Hoàn thành slide báo cáo')
+  expect(copiedText).toContain('ĐANG THỰC HIỆN')
+  expect(copiedText).toContain('Họp dự án với khách hàng')
+ }finally{await act(async()=>root.unmount());dom.window.close();vi.unstubAllGlobals()}
+})

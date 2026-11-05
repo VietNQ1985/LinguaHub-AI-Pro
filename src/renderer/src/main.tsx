@@ -219,6 +219,15 @@ function App() {
     else if (action === 'reload') void reload()
   }), [open, openApp, reload, apps])
 
+  React.useEffect(() => {
+    const handleOpenApp = (event: Event) => {
+      const target = (event as CustomEvent<AppId>).detail
+      if (target) void openApp(target)
+    }
+    window.addEventListener('linguahub:open-app', handleOpenApp)
+    return () => window.removeEventListener('linguahub:open-app', handleOpenApp)
+  }, [openApp])
+
   const openTasks=React.useCallback(async()=>{
     const version=++operation.current
     try {
