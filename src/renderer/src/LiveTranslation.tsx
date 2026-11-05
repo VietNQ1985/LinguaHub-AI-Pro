@@ -15,16 +15,21 @@ type ScanTrigger = { source: 'event' | 'poll' | 'initial' | 'confirmation' | 'co
 type TimingSample = { detectedMs: number; confirmationMs: number; aiWaitMs: number; requestMs: number; firstResponseMs: number | null; firstPartialUiMs: number | null; firstVisibleMs: number | null; completionMs: number; aiProcessMs: number; uiUpdateMs: number; source: 'event' | 'poll' | 'initial'; messageCount: number; responseAt: number }
 type ChatSnapshot = { conversationId: string; text: string; messages: Array<{ text: string; side: 'left' | 'right' | 'center'; id?: string }> }
 
-export function LiveTranslation({ model, active=true }: { model: string; active?:boolean }) {
+export function LiveTranslation({ model, active=true, service='whatsapp' }: { model: string; active?:boolean; service?:string }) {
+  const meetingChat=false
+  const appName=service==='outlook'?'Outlook':service==='teams'?'Teams':service==='zalo'?'Zalo':service==='zalopc'?'Zalo PC':'WhatsApp'
   const [enabled, setEnabled] = useState(false)
   const defaultAttempted=useRef(false)
   useEffect(()=>{
     if(!active||!model||defaultAttempted.current)return
     defaultAttempted.current=true
     let cancelled=false
-    void window.lingua.authorizeVisibleChatRead().then(allowed=>{if(!cancelled&&allowed)setEnabled(true)}).catch(()=>setStatus('Anh bấm Bật dịch để xác nhận quyền đọc tin nhắn.'))
-    return()=>{cancelled=true;defaultAttempted.current=false}
-  },[active,model])
+    // Start only from a grant already given (permission list or "remember"); never pop a prompt at launch.
+    const check=()=>void window.lingua.hasVisibleChatReadAuthorization().then(allowed=>{if(!cancelled)setEnabled(allowed)}).catch(()=>setStatus('Anh bấm Bật dịch để xác nhận quyền đọc tin nhắn.'))
+    check()
+    window.addEventListener('linguahub:permissions',check)
+    return()=>{cancelled=true;defaultAttempted.current=false;window.removeEventListener('linguahub:permissions',check)}
+  },[active,model,service])
   const [backgroundCloudAccess, setBackgroundCloudAccess] = useState<{ model: string; allowed: boolean } | null>(null)
   const [status, setStatus] = useState('Đang tắt đọc tin nhắn')
   const [messages, setMessages] = useState<VisibleMessage[]>([])
@@ -280,7 +285,7 @@ export function LiveTranslation({ model, active=true }: { model: string; active?
           return
         }
         if (!result) {
-          setStatus('Chờ mở WhatsApp hoặc Teams')
+          setStatus('Chờ mở WhatsApp, Teams, Zalo hoặc email Outlook')
           return
         }
         if (result.conversationId && conversationId.current && result.conversationId !== conversationId.current) {
@@ -346,7 +351,7 @@ export function LiveTranslation({ model, active=true }: { model: string; active?
         latestSnapshot.current = { version: currentVersion, messages: visible }
         commitMessages(visible)
         if (!visible.length) setStatus('Chưa thấy tin nhắn trong vùng chat đang mở')
-        else if (!activeModel) setStatus(model.startsWith('chatgpt:') ? 'Cần cho phép gửi chữ tin nhắn hiển thị đến ChatGPT để tự dịch' : 'Đã đọc tin nhắn. Chọn ChatGPT hoặc kết nối Ollama để tự dịch')
+        else if (!activeModel) setStatus(model.startsWith('chatgpt:') ? 'Cần cho phép gửi chữ tin nhắn hiển thị đến ChatGPT để tự dịch' : 'Đã đọc tin nhắn. Chọn dịch vụ AI đã kết nối để tự dịch')
         else {
           if (visible.some(item => item.status === 'confirming')) setStatus('Đang kiểm tra tin mới…')
           else if (visible.some(item => item.status === 'failed')) setStatus('Có tin chưa dịch được; xem nguyên nhân trên thẻ tin nhắn.')
@@ -477,14 +482,14 @@ export function LiveTranslation({ model, active=true }: { model: string; active?
 
     <p role="status" className="translation-status">{status}</p>
     {!model && <div className="translation-empty">Anh hãy chọn dịch vụ AI trong <button type="button" className="text-button" onClick={() => window.dispatchEvent(new Event('linguahub:settings'))}>Cài đặt</button> để bắt đầu.</div>}
-    {enabled && messages.length === 0 && <div className="translation-empty">Anh mở một cuộc trò chuyện trên WhatsApp hoặc Teams. Bản dịch sẽ xuất hiện ở đây khi ứng dụng nhận diện được tin nhắn.</div>}
+    {enabled && messages.length === 0 && <div className="translation-empty">{meetingChat?`Mở khung Chat trong cuộc họp ${appName}. Tin nhắn mới sẽ được dịch ở đây.`:'Anh mở một cuộc trò chuyện trên WhatsApp, Teams hoặc Zalo. Bản dịch sẽ xuất hiện ở đây khi ứng dụng nhận diện được tin nhắn.'}</div>}
     {!enabled && <div className="translation-empty">Sau khi bật dịch, ứng dụng đọc chữ của tin nhắn đang hiển thị ngay trong giao diện chat. Không chụp màn hình.</div>}
 
     {hasFailures && <button type="button" className="retry-button" onClick={() => { failed.current.clear(); failureMessages.current.clear(); setStatus('Đang thử dịch lại các tin chưa thành công…'); window.dispatchEvent(new Event('linguahub:retry-translation')) }}>↻ Thử dịch lại các tin chưa thành công</button>}
 
     <div className="translation-list" aria-label="Danh sách bản dịch">
       {skippedCount > 0 && <p className="translation-skipped">Đã bỏ qua {skippedCount} tin không phải tiếng Anh</p>}
-      {translatableMessages.map(item => <article className="translation-message" key={item.key}>
+      {translatableMessages.map(item => <article className={item.side === 'right' ? 'translation-message translation-message-self' : item.side === 'left' ? 'translation-message translation-message-other' : 'translation-message'} key={item.key}>
         {item.value?.translation.trim()
           ? <>
               <p className="translation-vietnamese" lang="vi">{item.value.translation}</p>
@@ -505,7 +510,7 @@ export function LiveTranslation({ model, active=true }: { model: string; active?
 
     <details className="visible-chat-settings">
       <summary>Cách đọc tin nhắn</summary>
-      <p>LinguaHub lấy chữ trực tiếp từ DOM của tin nhắn đang hiển thị trên WhatsApp hoặc Teams. Không chụp màn hình; bộ theo dõi DOM chỉ báo khi chat thay đổi, còn adapter cục bộ vẫn kiểm tra vùng hiển thị trước khi đọc.</p>
+      <p>LinguaHub lấy chữ trực tiếp từ DOM của tin nhắn đang hiển thị trên WhatsApp, Teams, Zalo hoặc email Outlook đang mở. Không chụp màn hình; bộ theo dõi DOM chỉ báo khi chat thay đổi, còn adapter cục bộ vẫn kiểm tra vùng hiển thị trước khi đọc.</p>
       {messages.length > 0 && <details><summary>Xem chữ đã đọc</summary><pre>{messages.map(item => item.text).join('\n')}</pre></details>}
       <details>
         <summary>Chẩn đoán tốc độ ({timings.length} mẫu)</summary>

@@ -28,7 +28,7 @@ export async function readCompletedResponse(response: Response, requestStartedAt
         if(['response.failed','response.incomplete','error'].includes(event.type)){
           const rawCode=event.response?.error?.code ?? event.error?.code ?? event.code
           const code=typeof rawCode==='string'&&/^[a-zA-Z0-9_-]{1,80}$/.test(rawCode)?rawCode:null
-          if(code==='subscription_sharing_usage_limit_exceeded')throw new Error('Đã chạm hạn mức ChatGPT dùng chung giữa các ứng dụng. Anh có thể chờ hạn mức làm mới hoặc chọn Ollama.')
+          if(code==='subscription_sharing_usage_limit_exceeded')throw new Error('Đã chạm hạn mức ChatGPT dùng chung giữa các ứng dụng. Anh có thể chờ hạn mức làm mới.')
           if(code==='subscription_sharing_usage_unavailable')throw new Error('Tài khoản hiện chưa được cấp quyền inference ChatGPT cho ứng dụng này. Kiểm tra quyền/điều kiện SIWC trong tài khoản.')
           throw new Error(`OpenAI chưa hoàn tất kết quả${code?` (${code})`:''}. Kiểm tra quyền và hạn mức gói ChatGPT.`)
         }

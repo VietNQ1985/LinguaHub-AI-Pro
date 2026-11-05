@@ -8,6 +8,7 @@ app.whenReady().then(async()=>{
  for(const [service,host,html] of [
   ['whatsapp','web.whatsapp.com','<span aria-label="2 unread messages">2</span>'],
   ['teams','teams.microsoft.com','<span data-tid="chat-badge">2</span>'],
+  ['outlook','outlook.office.com','<nav role="navigation"><span aria-label="2 unread messages">2</span></nav>'],
   ['zalo','chat.zalo.me','<nav><span class="z-noti-badge">2</span></nav>'],
  ]){
   const received=[],partition=session.fromPartition('unread-smoke-'+service)

@@ -37,6 +37,13 @@ export const ERP_GLOSSARY = [
   ['master data', 'dữ liệu danh mục'],
   ['chart of accounts', 'hệ thống tài khoản kế toán'],
   ['subledger', 'sổ kế toán chi tiết'],
+  // Added after meeting-caption benchmarks where these terms were left in English or mistranslated.
+  ['goods receipt', 'phiếu nhập kho'],
+  ['posted', 'đã ghi sổ'],
+  ['price variance', 'chênh lệch giá'],
+  ['invoice on hold', 'hóa đơn đang bị tạm giữ'],
+  ['close the quarter', 'khóa sổ quý'],
+  ['forecast', 'dự báo'],
 ] as const
 
 export const ERP_GLOSSARY_PROMPT = ERP_GLOSSARY

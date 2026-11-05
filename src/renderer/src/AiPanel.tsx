@@ -1,8 +1,12 @@
+import { WindowsVoiceInput } from './WindowsVoiceInput'
 import { MeetingTranslation } from './MeetingTranslation'
+import { ExternalProviders } from './ExternalProviders'
 import { stopReplyPlayback } from './SpeechPlayback'
 import { useEffect, useRef, useState } from 'react'
 import { LiveTranslation } from './LiveTranslation'
 import { AiResult } from './AiResult'
+import { PermissionsPanel } from './PermissionsPanel'
+import { ZaloCallBar } from './ZaloCallBar'
 import { ChatGPTAccount } from './ChatGPTAccount'
 import { AdvancedSettings } from './AdvancedSettings'
 import { DEFAULT_CHATGPT_MODEL, DEFAULT_REASONING_EFFORT, DEFAULT_TRANSLATION_REASONING_EFFORT, isGpt6Model, REASONING_EFFORTS, type ReasoningEffort } from '../../shared/model-reasoning'
@@ -39,11 +43,15 @@ function recentChatContext(messages: ChatContextMessage[]) {
 function modelLabel(value: string) {
   if (value === DEFAULT_CHATGPT_MODEL) return 'ChatGPT · GPT-6 Luna'
   if (value.startsWith('chatgpt:')) return 'ChatGPT · ' + value.slice(8)
-  return value ? 'Ollama · ' + value : 'Chưa chọn mô hình'
+  if (value.startsWith('gemini:')) return 'Gemini · ' + value.slice(7)
+  if (value.startsWith('remote:')) return 'Máy AI riêng · ' + value.slice(7)
+  return value ? 'Mô hình không còn hỗ trợ' : 'Chưa chọn mô hình'
 }
 
 export function AiPanel() {
   const [service,setService]=useState('whatsapp')
+  const meetingCapable=service==='teams'
+  const chatCapable=service==='whatsapp'||service==='zalo'||service==='zalopc'||service==='outlook'||meetingCapable
   useEffect(()=>{const changed=(event:Event)=>{const value=(event as CustomEvent<string>).detail;setService(value);setMeetingMode(false);invalidateReply()};window.addEventListener('linguahub:service',changed);return()=>window.removeEventListener('linguahub:service',changed)},[])
   const [meetingMode,setMeetingMode]=useState(false)
   const [mode, setMode] = useState<PanelMode>('translate')
@@ -73,7 +81,6 @@ export function AiPanel() {
   const [boundConversation,setBoundConversation]=useState<string|null>(null)
   const intentRef = useRef<HTMLTextAreaElement>(null)
   const replyDraftRef = useRef<HTMLTextAreaElement>(null)
-  const [voiceHelp,setVoiceHelp]=useState(false)
   const [replyFast,setReplyFast]=useState(false)
   const cancelActiveRequest=()=>{
     if(activeReply.current){requestGeneration.current++;void window.lingua.cancelAi(activeReply.current).catch(()=>{})}
@@ -116,7 +123,7 @@ export function AiPanel() {
     let active = true
     void Promise.all([window.lingua.getPreferences(), window.lingua.getReasoningEffort(), window.lingua.getTranslationReasoningEffort(), window.lingua.getFastMode()]).then(([preferences, savedEffort, savedTranslationEffort, savedFastMode]) => {
       if (!active) return
-      const selectedModel = preferences.model || DEFAULT_CHATGPT_MODEL
+      const selectedModel = /^(chatgpt:|gemini:|remote:)/.test(preferences.model) ? preferences.model : DEFAULT_CHATGPT_MODEL
       setModel(selectedModel)
       setReasoningEffort(savedEffort)
       setTranslationReasoningEffort(savedTranslationEffort)
@@ -168,18 +175,6 @@ export function AiPanel() {
     setTheme(next)
     document.documentElement.dataset.theme = next
     void window.lingua.setPreferences({ theme: next, model }).catch(() => setError('Không lưu được giao diện.'))
-  }
-
-  const connectOllama = async () => {
-    setError('')
-    try {
-      const values = await window.lingua.listModels()
-      if (!values.length) { setError('Ollama chưa có mô hình. Anh cần cài mô hình trên máy.'); return }
-      setModels(values)
-      saveModel(values[0])
-    } catch {
-      setError('Chưa kết nối được Ollama. Anh kiểm tra Ollama đang chạy trên máy.')
-    }
   }
 
   const connectChatGPT = async () => {
@@ -237,15 +232,15 @@ export function AiPanel() {
   }
   const sendReplyRequest=()=>generateReply(false)
   const sendContextualReplyRequest=()=>generateReply(true)
-  const translateReplyDraft=async()=>{
-    const draft=replyDraft.trim()
+  const translateReplyDraft=async(spokenDraft?:string)=>{
+    const draft=(spokenDraft??replyDraft).trim()
     if(!model||busy||draft.length<2)return
     invalidateReply()
     const generation=requestGeneration.current
     const requestId=crypto.randomUUID()
     activeReply.current=requestId
     const valid=()=>generation===requestGeneration.current&&activeReply.current===requestId
-    const usesChatContext=service==='whatsapp'||service==='teams'
+    const usesChatContext=service!=='dashboard'
     setBusy(true);setError('');setComposerStatus('Đang chuẩn bị bản xem trước…')
     try{
       let snapshot: Awaited<ReturnType<typeof window.lingua.readVisibleChat>>=null
@@ -310,6 +305,21 @@ export function AiPanel() {
   const previewContextIsCurrent=previewConversation===null||(boundConversation!==null&&previewConversation===boundConversation)
   const previewSettingsCurrent=previewSettingsKey===JSON.stringify([service,model,replyTone])
   const canCopyPreview=Boolean(englishPreview.trim()&&previewContextIsCurrent&&previewMatchesDraft&&previewSettingsCurrent&&!busy)
+  // Direct send needs a preview made from the visible chat, so the main process can check it is still the same conversation.
+  const canSendPreview=canCopyPreview&&previewConversation!==null
+  const [sending,setSending]=useState(false)
+  const [sendConfirm,setSendConfirm]=useState(false)
+  useEffect(()=>{void Promise.resolve().then(()=>window.lingua.sendConfirm()).then(value=>setSendConfirm(value===true)).catch(()=>{})},[])
+  const sendEnglishPreview=async()=>{
+    if(!canSendPreview||sending||!previewConversation)return
+    setSending(true)
+    try{
+      const result=await window.lingua.sendChatMessage(englishPreview,previewConversation)
+      if(result.sent){setComposerStatus(`Đã gửi đến ${result.recipient}.`);setReplyDraft('');setEnglishPreview('');setPreviewSource('');setPreviewConversation(null)}
+      else setComposerStatus(result.cancelled?'Đã huỷ, chưa gửi.':'Chưa xác nhận được tin đã gửi. Anh kiểm tra ô chat.')
+    }catch(failure){setComposerStatus(failure instanceof Error?failure.message.replace(/^Error invoking remote method '[^']+': (Error: )?/,''):'Chưa gửi được.')}
+    finally{setSending(false)}
+  }
   const copyEnglishPreview=async()=>{
     if(!canCopyPreview)return
     try{await window.lingua.writeClipboardText(englishPreview);setComposerStatus('Đã sao chép. Anh dán vào ô chat, kiểm tra người nhận rồi tự gửi.')}
@@ -325,38 +335,40 @@ export function AiPanel() {
     </div>
 
     <div className="assistant-content">
-      <div className="meeting-modes" role="group" aria-label="Chế độ dịch"><button type="button" aria-pressed={!meetingMode} onClick={()=>{invalidateReply();setMeetingMode(false)}}>Dịch tin nhắn</button><button type="button" disabled={service!=='teams'} aria-pressed={meetingMode} onClick={()=>{invalidateReply();setMeetingMode(true)}}>Dịch cuộc họp</button></div>
-      {service==='zalo'&&!meetingMode&&<p className="translation-empty">Zalo Web có phiên đăng nhập riêng. Bản này chưa đọc/dịch được hội thoại Zalo; composer bên dưới chỉ dịch câu anh tự nhập, không dùng ngữ cảnh chat.</p>}
-      {service==='teams'&&!meetingMode&&<p className="meeting-hint">Đang ở chế độ dịch tin nhắn. Để đọc phụ đề khi họp: chọn <button type="button" onClick={()=>{invalidateReply();setMeetingMode(true)}}>Dịch cuộc họp</button>, bật phụ đề English trong Teams rồi bấm Bắt đầu dịch.</p>}
-      {meetingMode&&mode==='translate'&&<MeetingTranslation model={model}/>}
+      {mode==='translate'&&<PermissionsPanel firstRun onSaved={()=>window.dispatchEvent(new Event('linguahub:permissions'))} />}
+      {service==='zalo'&&<ZaloCallBar />}
+      <div className="meeting-modes" role="group" aria-label="Chế độ dịch"><button type="button" aria-pressed={!meetingMode} onClick={()=>{invalidateReply();setMeetingMode(false)}} title="Dịch tin nhắn đang hiển thị">Tin nhắn</button><button type="button" disabled={!meetingCapable} aria-pressed={meetingMode} onClick={()=>{invalidateReply();setMeetingMode(true)}} title="Dịch phụ đề có sẵn của Teams">Cuộc họp</button></div>
+      {meetingCapable&&!meetingMode&&<p className="meeting-hint">Đang ở chế độ dịch tin nhắn. Để đọc phụ đề khi họp: chọn <button type="button" onClick={()=>{invalidateReply();setMeetingMode(true)}}>Dịch cuộc họp</button>, bật phụ đề English trong Teams rồi bấm Bắt đầu dịch.</p>}
+      {meetingMode&&mode==='translate'&&<MeetingTranslation model={model} service={service}/>}
 
       {/* Keep the translation component mounted: changing tabs or hiding the panel must not stop visible chat reading. */}
-      <div style={{ display: mode === 'translate' && !meetingMode && service!=='zalo' ? 'block' : 'none' }} aria-hidden={mode !== 'translate'}>
-        <LiveTranslation model={model} active={(service==='whatsapp'||service==='teams')&&!meetingMode} />
+      {/* During a meeting the chat translation and reply suggestions stay below the spoken translation, so both run at once. */}
+      <div style={{ display: mode === 'translate' && chatCapable ? 'block' : 'none' }} aria-hidden={mode !== 'translate'}>
+        {(meetingMode)&&<h3 className="meeting-chat-title">Chat trong cuộc họp</h3>}
+        <LiveTranslation model={model} service={service} active={chatCapable} />
       </div>
 
-      {mode==='translate'&&!meetingMode&&service!=='zalo'&&<details className="reply-suggestions" onToggle={event=>{if(!event.currentTarget.open)invalidateReply()}}>
+      {mode==='translate'&&chatCapable&&<details className="reply-suggestions" onToggle={event=>{if(!event.currentTarget.open)invalidateReply()}}>
         <summary>Gợi ý trả lời cho chat này</summary>
         <div className="reply-view">
           <p className="helper-text">Tạo ba cách trả lời dựa trên tin nhắn đang hiển thị. Chỉ gửi yêu cầu AI khi anh bấm nút; ứng dụng không tự gửi câu trả lời.</p>
           <label htmlFor="reply-input">Ý muốn bổ sung (không bắt buộc)</label>
           <textarea ref={intentRef} id="reply-input" value={input} maxLength={2000} onChange={event=>{setInput(event.target.value);invalidateReply()}} placeholder="Ví dụ: Tôi sẽ kiểm tra lại và phản hồi vào sáng mai." />
-          <button type="button" onClick={()=>{intentRef.current?.focus();setVoiceHelp(true)}}>🎙 Nhập giọng nói bằng Windows (Win+H)</button>
-          {voiceHelp&&<p role="status" className="helper-text">Đây là nhập liệu của Windows, không phải ghi âm trong LinguaHub. Windows quản lý quyền và cách xử lý giọng nói; ứng dụng không thu hay lưu âm thanh.</p>}
+          <WindowsVoiceInput disabled={busy} focusInput={()=>intentRef.current?.focus()} />
           <label className="checkbox-label"><input type="checkbox" checked={model.startsWith('chatgpt:')&&replyFast} disabled={!model.startsWith('chatgpt:')} onChange={event=>{invalidateReply();setReplyFast(event.target.checked)}} /> Trả lời nhanh ChatGPT (Low/Medium do model công bố)</label>
-          {!model.startsWith('chatgpt:')&&<p className="helper-text">Ollama dùng cấu hình model cục bộ; tùy chọn này không áp dụng.</p>}
+          {!model.startsWith('chatgpt:')&&<p className="helper-text">Chế độ trả lời nhanh này chỉ áp dụng cho ChatGPT.</p>}
           {!model&&<p className="helper-text">Anh hãy chọn dịch vụ AI trong Cài đặt.</p>}
           <div className="suggestion-actions">
             <button type="button" className="primary-button" disabled={!model||busy} onClick={()=>void sendContextualReplyRequest()}>{busy?'Đang đọc chat và tạo gợi ý…':output!==null?'Tạo lại 3 gợi ý':'Tạo 3 gợi ý'}</button>
             {input.trim()&&<button type="button" className="secondary-button" disabled={!model||busy} onClick={()=>void sendReplyRequest()}>Chỉ dùng ý tôi nhập</button>}
           </div>
           {output!==null&&<div className="reply-results"><AiResult result={output} onUseReply={useSuggestedReply} onDiscardReply={discardSuggestion} /></div>}
-          <p className="helper-text">Chỉ lấy chữ trong các tin đang hiển thị. ChatGPT cần quyền xử lý cloud riêng; Ollama xử lý cục bộ.</p>
+          <p className="helper-text">Chỉ lấy chữ trong các tin đang hiển thị. Dịch vụ AI cần quyền xử lý nội dung riêng.</p>
         </div>
       </details>}
 
-      {mode==='translate'&&!meetingMode&&<section className="reply-composer" aria-labelledby="reply-composer-title">
-        <div className="composer-heading"><div><h3 id="reply-composer-title">Soạn câu trả lời</h3><p>{service==='zalo'?'Zalo Web · dịch câu riêng':'Dịch theo ngữ cảnh chat đang mở'}</p></div></div>
+      {mode==='translate'&&<section className="reply-composer" aria-labelledby="reply-composer-title">
+        <div className="composer-heading"><div><h3 id="reply-composer-title">Soạn câu trả lời</h3><p>Dịch theo ngữ cảnh chat đang mở</p></div></div>
         <label htmlFor="reply-composer-input">Câu trả lời tiếng Việt</label>
         <textarea ref={replyDraftRef} id="reply-composer-input" value={replyDraft} maxLength={2000} onChange={event=>{setReplyDraft(event.target.value);cancelActiveRequest()}} placeholder="Nhập câu anh muốn trả lời bằng tiếng Việt…" />
         <div className="composer-options">
@@ -366,10 +378,12 @@ export function AiPanel() {
             <option value="friendly">Thân thiện, tự nhiên</option>
             <option value="concise">Ngắn gọn</option>
           </select>
-          <button type="button" className="secondary-button" onClick={()=>{replyDraftRef.current?.focus();setVoiceHelp(true)}}>🎙 Nhập giọng nói Windows (Win+H)</button>
         </div>
-        {voiceHelp&&<p className="helper-text">Win+H là tính năng đọc chính tả của Windows, không phải microphone tích hợp. LinguaHub không thu hoặc lưu âm thanh.</p>}
-        <button type="button" className="primary-button composer-translate" disabled={!model||busy||replyDraft.trim().length<2} onClick={()=>void translateReplyDraft()}>{busy?'Đang dịch…':englishPreview?'Dịch lại bản tiếng Anh':'Dịch theo ngữ cảnh'}</button>
+        {/* Speaking is one step: the recognised Vietnamese is added to the draft and translated right away. */}
+        <WindowsVoiceInput disabled={busy} focusInput={()=>replyDraftRef.current?.focus()} />
+        <div className="composer-voice-row">
+          <button type="button" className="primary-button composer-translate" disabled={!model||busy||replyDraft.trim().length<2} onClick={()=>void translateReplyDraft()}>{busy?'Đang dịch…':englishPreview?'Dịch lại bản tiếng Anh':'Dịch theo ngữ cảnh'}</button>
+        </div>
         <label htmlFor="reply-composer-english">Bản tiếng Anh xem trước · có thể chỉnh sửa</label>
         <textarea id="reply-composer-english" value={englishPreview} maxLength={4000} onChange={event=>{setEnglishPreview(event.target.value);setPreviewEdited(true);setComposerStatus('Đã lưu chỉnh sửa tiếng Anh. Nếu thay đổi câu tiếng Việt, anh cần dịch lại trước khi sao chép.')}} placeholder="Bản tiếng Anh sẽ hiện ở đây…" />
         {englishPreview&&!previewMatchesDraft&&<p className="composer-warning">Câu tiếng Việt đã thay đổi. Bản tiếng Anh cũ chỉ để tham khảo; hãy dịch lại trước khi sao chép.</p>}
@@ -378,20 +392,21 @@ export function AiPanel() {
          {englishPreview&&!previewSettingsCurrent&&<p className="composer-warning">Nền tảng, mô hình hoặc giọng điệu đã đổi. Anh cần tạo lại bản dịch trước khi sao chép.</p>}
         <div className="composer-actions">
           <button type="button" className="secondary-button" disabled={!canCopyPreview} onClick={()=>void copyEnglishPreview()}>Sao chép để gửi trong chat</button>
-          <button type="button" className="send-disabled" disabled title="Chưa có adapter đủ tin cậy để xác thực người nhận và xác nhận trạng thái gửi.">Gửi trực tiếp chưa khả dụng</button>
+          <button type="button" className="primary-button" disabled={service==='outlook'||!canSendPreview||sending} title="Gửi vào đúng cuộc trò chuyện đã dùng để dịch." onClick={()=>void sendEnglishPreview()}>{service==='outlook'?'Outlook: sao chép để gửi':sending?'Đang gửi…':'Gửi trực tiếp'}</button>
         </div>
-        <p id="send-unsupported-help" className="helper-text">Sau khi sao chép, anh dán vào chat, kiểm tra đúng người nhận rồi tự bấm gửi. LinguaHub hiện chưa xác minh được người nhận và kết quả gửi trên WhatsApp, Teams hoặc Zalo.</p>
+        {<label className="checkbox-label"><input type="checkbox" checked={sendConfirm} onChange={event=>{const value=event.target.checked;setSendConfirm(value);void window.lingua.sendConfirm(value).catch(()=>{})}} /> Hỏi lại người nhận trước khi gửi</label>}
+        <p id="send-help" className="helper-text">Chỉ gửi vào đúng chat đã dùng để dịch, khi ô soạn tin đang trống.</p>
         <p className="composer-status" role="status" aria-live="polite">{composerStatus||'Bản tiếng Anh chỉ được tạo khi anh bấm dịch.'}</p>
       </section>}
 
       {mode === 'settings' && <div className="settings-view">
         <div className="settings-title"><h3>Cài đặt</h3><button type="button" onClick={() => setMode('translate')}>← Quay lại bản dịch</button></div>
+        <div className="settings-group"><PermissionsPanel onSaved={()=>window.dispatchEvent(new Event('linguahub:permissions'))} /></div>
         <div className="settings-group">
           <h4>Dịch vụ AI</h4>
-          <p className="helper-text">Chọn ChatGPT hoặc Ollama. Ứng dụng không tự sử dụng API trả phí.</p>
+          <p className="helper-text">Dùng ChatGPT đã đăng nhập. Ứng dụng không tự sử dụng API trả phí.</p>
           <div className="settings-actions">
             <button type="button" onClick={() => void connectChatGPT()}>Chọn ChatGPT</button>
-            <button type="button" onClick={() => void connectOllama()}>Chọn Ollama</button>
           </div>
           <label htmlFor="model-choice">Mô hình AI đang sử dụng</label>
           <select id="model-choice" value={model} onChange={event => saveModel(event.target.value)}>
@@ -418,6 +433,11 @@ export function AiPanel() {
         <div className="settings-group">
           <h4>Tài khoản ChatGPT</h4>
           <ChatGPTAccount />
+        </div>
+        <div className="settings-group">
+          <h4>Dịch vụ AI riêng</h4>
+          <p className="helper-text">Gemini hoặc máy AI của anh qua link HTTPS (ví dụ ngrok). Chữ chỉ được gửi đi khi anh bật quyền.</p>
+          <ExternalProviders onModels={(_provider, names) => { if (names.length) { setModels(names); saveModel(names[0]) } }} />
         </div>
         <div className="settings-group">
           <h4>Giao diện</h4>

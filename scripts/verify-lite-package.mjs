@@ -1,0 +1,15 @@
+import {existsSync,readFileSync,statSync} from 'node:fs';
+import {resolve,join} from 'node:path';
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+const require=createRequire(import.meta.url),asar=require('@electron/asar');
+const root=resolve(import.meta.dirname,'..'),release=join(root,'release'),archive=join(release,'win-unpacked/resources/app.asar');
+const names=asar.listPackage(archive).map(name=>name.replaceAll('\\','/'));
+for(const name of ['/out/main/index.js','/out/preload/index.cjs','/out/preload/chat-view.cjs','/out/renderer/index.html'])assert(names.includes(name),'Missing '+name);
+assert(!names.some(name=>/node_modules\/(?:@huggingface|onnxruntime)|whisper\.worker|out\/renderer\/ort\//i.test(name)),'Removed model runtime was packaged');
+const main=asar.extractFile(archive,join('out','main','index.js')).toString();
+for(const endpoint of ['127.0.0.1:11434','zoom.us/signin','meet.google.com'])assert(!main.includes(endpoint),'Removed integration still bundled: '+endpoint);
+assert(main.includes('https://outlook.office.com/mail/'),'Outlook URL missing');
+assert(existsSync(join(release,'win-unpacked/resources/sql-wasm.wasm')),'Missing SQL WASM');
+const setup=join(release,'LinguaHub-AI-Pro-Setup.exe');assert(statSync(setup).size>20*1024**2&&statSync(setup).size<200*1024**2,'Unexpected installer size');
+console.log(JSON.stringify({installer:setup,bytes:statSync(setup).size,asarBytes:statSync(archive).size,preloads:true,outlook:true,modelRuntimesAbsent:true}));

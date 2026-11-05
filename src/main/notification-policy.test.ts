@@ -21,3 +21,10 @@ test('worker notifications are accepted only after the user grants the service p
   expect(canShowWorkspaceNotification('whatsapp', 'media', 'https://web.whatsapp.com', true, true)).toBe(false)
   expect(canShowWorkspaceNotification('teams', 'notifications', 'https://evil.example', true, true)).toBe(false)
 })
+
+test('Outlook notifications require the owned mail view and real mail origin',()=>{
+ expect(canShowWorkspaceNotification('outlook','notifications','https://outlook.office.com',true,true)).toBe(true)
+ expect(canShowWorkspaceNotification('outlook','notifications','https://login.microsoftonline.com',true,true)).toBe(false)
+ expect(canShowWorkspaceNotification('outlook','notifications','https://outlook.office.com.evil.invalid',true,true)).toBe(false)
+ expect(canShowWorkspaceNotification('outlook','notifications','https://outlook.office.com',true,false)).toBe(false)
+})

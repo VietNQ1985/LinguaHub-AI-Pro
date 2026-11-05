@@ -1,0 +1,13 @@
+import {spawn} from 'node:child_process';
+import {createRequire} from 'node:module';
+import {mkdtempSync,writeFileSync,unlinkSync,rmdirSync} from 'node:fs';
+import {join,resolve} from 'node:path';
+import {tmpdir} from 'node:os';
+import {buildVisibleChatReadScript} from '../src/main/chat-dom-reader.ts';
+const dir=mkdtempSync(join(tmpdir(),'linguahub-reader-script-')),script=join(dir,'reader.js');
+writeFileSync(script,buildVisibleChatReadScript('outlook'));
+const require=createRequire(import.meta.url),env={...process.env,LINGUAHUB_READER_FIXTURE_SCRIPT:script};
+delete env.ELECTRON_RUN_AS_NODE;delete env.ELECTRON_RENDERER_URL;
+const child=spawn(require('electron'),[resolve('scripts/smoke-outlook-reader.cjs')],{env,stdio:'inherit',windowsHide:true});
+const code=await new Promise((resolve,reject)=>{child.on('error',reject);child.on('exit',resolve)});
+unlinkSync(script);rmdirSync(dir);process.exitCode=code??1;

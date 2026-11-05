@@ -1,16 +1,22 @@
+import { TasksPanel } from './TasksPanel'
 import React from 'react'
 import { createRoot } from 'react-dom/client'
 import './style.css'
 import { AiPanel } from './AiPanel'
 import type {UnreadCounts} from '../../shared/workspace-unread'
 import {WorkspaceUnreadBadge} from './WorkspaceUnreadBadge'
+import { ZaloPcPane } from './ZaloPcPane'
 
-type WorkspaceService = 'whatsapp' | 'teams' | 'zalo'
-type UiService=WorkspaceService
+type WorkspaceService = 'whatsapp' | 'teams' | 'zalo' | 'outlook'
+type UiService=WorkspaceService|'zalopc'
 
 declare global {
   interface Window {
     lingua: {
+      listTasks():Promise<import('../../main/tasks').WorkTask[]>
+      saveTask(input:unknown):Promise<import('../../main/tasks').WorkTask>
+      extractTasksFromVisible(service:import('../../main/tasks').TaskSourceService,model:string,requestId:string):Promise<import('../../main/tasks').TaskCaptureResult&{cancelled:boolean}>
+      openWindowsVoiceTyping():Promise<boolean>
       getWorkspaceUnread():Promise<UnreadCounts>
       onWorkspaceUnread(callback:(counts:UnreadCounts)=>void):()=>void
       hideToTray():Promise<boolean>
@@ -21,17 +27,27 @@ declare global {
       showDashboard(): Promise<boolean>
       openExternal(service: WorkspaceService): Promise<void>
       testNotification(): Promise<boolean>
-      getNotificationPreferences(): Promise<{ whatsapp: boolean; teams: boolean; zalo:boolean }>
-      setNotificationPreference(service: WorkspaceService, enabled: boolean): Promise<{ whatsapp: boolean; teams: boolean; zalo:boolean }>
+      getNotificationPreferences(): Promise<{ whatsapp: boolean; teams: boolean; zalo:boolean; outlook:boolean }>
+      setNotificationPreference(service: WorkspaceService, enabled: boolean): Promise<{ whatsapp: boolean; teams: boolean; zalo:boolean; outlook:boolean }>
       authorizeVisibleChatRead(): Promise<boolean>
       hasVisibleChatReadAuthorization(): Promise<boolean>
       stopVisibleChatRead(): Promise<void>
+      sendChatMessage(text: string, conversationId: string): Promise<{ sent: boolean; cancelled: boolean; recipient: string }>
+      sendConfirm(value?: boolean): Promise<boolean>
+      openZaloPc(): Promise<{ installed: boolean; running: boolean; connected: boolean; embedded: boolean }>
+      embedZaloPc(enabled: boolean): Promise<boolean>
+      callZaloViaPc(kind: 'voice' | 'video'): Promise<{ called: boolean; name: string }>
+      zaloPcStatus(): Promise<{ installed: boolean; running: boolean; connected: boolean }>
+      connectZaloPc(): Promise<boolean>
+      callZaloPc(kind: 'voice' | 'video'): Promise<boolean>
+      getPermissions(): Promise<{ chat: boolean; mic: boolean; teams: boolean; zalo: boolean; reviewed: boolean }>
+      setPermissions(grants: { chat: boolean; mic: boolean; teams: boolean; zalo: boolean }): Promise<boolean>
       readVisibleChat(): Promise<{ conversationId: string; text: string; messages: Array<{ text: string; side: 'left' | 'right' | 'center'; id?: string }> } | null>
       onVisibleChatChanged(callback: (change: {service:WorkspaceService;observedAt:number}) => void): () => void
       listVocabulary(): Promise<import('./Vocabulary').Word[]>
       addVocabulary(input: { term: string; meaning: string }): Promise<void>
       reviewVocabulary(id: string, remembered: boolean): Promise<void>
-      getLearningProgress(): Promise<{ totalWords: number; reviewedWords: number; dueWords: number; reviewsToday: number; lessonsToday: number; lessonCompletedToday: boolean; studyStreak: number; aiRequestsToday: number; ollamaRequestsToday: number; chatgptRequestsToday: number }>
+      getLearningProgress(): Promise<{ totalWords: number; reviewedWords: number; dueWords: number; reviewsToday: number; lessonsToday: number; lessonCompletedToday: boolean; studyStreak: number; aiRequestsToday: number; chatgptRequestsToday: number }>
       completeDailyLesson(): Promise<boolean>
       getDataRetentionDays(): Promise<number>
       setDataRetentionDays(days: number): Promise<boolean>
@@ -51,6 +67,11 @@ declare global {
       allowCloud(): Promise<boolean>
       allowBackgroundCloud(): Promise<boolean>
       chatgptModels(): Promise<{ slug: string; name: string; reasoningEfforts?: import('../../shared/model-reasoning').ReasoningEffort[] }[]>
+      providerStatus(): Promise<{ geminiKeySet: boolean; remoteUrl: string; remoteTokenSet: boolean; geminiConsent: boolean; remoteConsent: boolean }>
+      setProviderSecrets(input: { geminiKey?: string; remoteUrl?: string; remoteToken?: string }): Promise<{ ok: boolean }>
+      setProviderConsent(provider: 'gemini' | 'remote', enabled: boolean): Promise<boolean>
+      providerModels(provider: 'gemini' | 'remote'): Promise<string[]>
+      setAlwaysOnTop(enabled: boolean): Promise<boolean>
       connectChatGPT(): Promise<{ connected: boolean; email: string | null; usageEnabled: boolean }>
       connectChatGPTNewWorkspace(): Promise<{ connected: boolean; email: string | null; usageEnabled: boolean } | null>
       chatgptStatus(): Promise<{ connected: boolean; email: string | null; usageEnabled: boolean }>
@@ -58,7 +79,6 @@ declare global {
       readMeeting(token:string):Promise<{diagnostics?:{captionMarkers:string[];iframeCount:number};session:string|null;segments:Array<{id:string;text:string;speaker:string;timestamp:number}>}>
       stopMeeting(token:string):Promise<void>
       translateMeeting(token:string,text:string,id:string):Promise<{translation:string}>
-      listModels(): Promise<string[]>
       writeClipboardText(text: string): Promise<boolean>
       runAi(task: string, text: string, model: string, requestId?: string, options?: {replyFast:boolean}): Promise<unknown>
       onAiStream(requestId: string, callback: (delta: string) => void): () => void
@@ -68,19 +88,20 @@ declare global {
 }
 
 function App() {
-  const [unread,setUnread]=React.useState<UnreadCounts>({whatsapp:0,teams:0,zalo:0})
+  const [unread,setUnread]=React.useState<UnreadCounts>({whatsapp:0,teams:0,zalo:0,outlook:0})
   React.useEffect(()=>{
     let alive=true,updated=false
     const stop=window.lingua.onWorkspaceUnread(counts=>{updated=true;if(alive)setUnread(counts)})
     void window.lingua.getWorkspaceUnread().then(counts=>{if(alive&&!updated)setUnread(counts)}).catch(()=>{})
     return()=>{alive=false;stop()}
   },[])
-  const badge=(service:WorkspaceService)=><WorkspaceUnreadBadge value={unread[service]}/>
+  const badge=(service:'whatsapp'|'teams'|'zalo'|'outlook')=><WorkspaceUnreadBadge value={unread[service]}/>
   const [activeService, setActiveService] = React.useState<UiService>('whatsapp')
   const operation=React.useRef(0)
   const [fallbackService, setFallbackService] = React.useState<WorkspaceService | null>(null)
   const [panelWidth, setPanelWidth] = React.useState(400)
   const [panelCollapsed, setPanelCollapsed] = React.useState(false)
+  const [showTasks,setShowTasks]=React.useState(false)
   const [status, setStatus] = React.useState('Đang mở WhatsApp…')
   const [online, setOnline] = React.useState(navigator.onLine)
   const resizing = React.useRef(false)
@@ -114,13 +135,24 @@ function App() {
     window.lingua.setWorkspacePanelLayout(panelWidth, panelCollapsed, false)
   }, [panelWidth, panelCollapsed])
 
+  const [zaloPc,setZaloPc]=React.useState<{ installed: boolean; running: boolean; connected: boolean; embedded?: boolean } | null>(null)
+  const openZaloPc = React.useCallback(async () => {
+    ++operation.current
+    setActiveService('zalopc')
+    setFallbackService(null)
+    window.dispatchEvent(new Event('linguahub:workspace'))
+    window.dispatchEvent(new CustomEvent('linguahub:service',{detail:'zalopc'}))
+    setStatus('Zalo PC')
+    try { setZaloPc(await window.lingua.openZaloPc()) } catch { setStatus('Chưa kiểm tra được Zalo PC.') }
+  }, [])
   const open = React.useCallback(async (service: WorkspaceService) => {
     const current=++operation.current
     setActiveService(service)
     setFallbackService(null)
     window.dispatchEvent(new Event('linguahub:workspace'))
     window.dispatchEvent(new CustomEvent('linguahub:service',{detail:service}))
-    setStatus(service === 'whatsapp' ? 'Đang mở WhatsApp…' : service==='zalo'?'Đang mở Zalo Web…':'Đang mở Teams…')
+    setShowTasks(false)
+    setStatus(service === 'whatsapp' ? 'Đang mở WhatsApp…' : service==='zalo'?'Đang mở Zalo Web…':service==='outlook'?'Đang mở Outlook…':'Đang mở Teams…')
     try {
       await window.lingua.openWorkspace(service)
       if(current!==operation.current)return
@@ -137,6 +169,7 @@ function App() {
   }, [open])
 
   const reload = React.useCallback(async () => {
+    if(activeService==='zalopc'){try{setZaloPc(await window.lingua.zaloPcStatus())}catch{}return}
     window.dispatchEvent(new Event('linguahub:workspace'))
     setStatus('Đang tải lại trang…')
     try {
@@ -150,7 +183,7 @@ function App() {
   }, [activeService])
 
   React.useEffect(() => window.lingua.onShortcut(action => {
-    if (action === 'whatsapp' || action === 'teams' || action==='zalo') void open(action)
+    if (action === 'whatsapp' || action === 'teams' || action==='zalo' || action==='outlook') void open(action)
     else if (action === 'dashboard') void open('whatsapp')
     else if (action === 'reload') void reload()
   }), [open, reload])
@@ -172,6 +205,9 @@ function App() {
         <button type="button" className={activeService === 'whatsapp' ? 'workspace-tab active' : 'workspace-tab'} aria-current={activeService === 'whatsapp' ? 'page' : undefined} onClick={() => void open('whatsapp')}>WhatsApp{badge('whatsapp')}</button>
         <button type="button" className={activeService === 'teams' ? 'workspace-tab active' : 'workspace-tab'} aria-current={activeService === 'teams' ? 'page' : undefined} onClick={() => void open('teams')}>Microsoft Teams{badge('teams')}</button>
         <button type="button" className={activeService==='zalo'?'workspace-tab active':'workspace-tab'} aria-current={activeService==='zalo'?'page':undefined} onClick={()=>void open('zalo')}>Zalo Web{badge('zalo')}</button>
+        <button type="button" className={activeService==='zalopc'?'workspace-tab active':'workspace-tab'} aria-current={activeService==='zalopc'?'page':undefined} onClick={()=>void openZaloPc()}>Zalo PC</button>
+        <button type="button" className={activeService==='outlook'?'workspace-tab active':'workspace-tab'} aria-current={activeService==='outlook'?'page':undefined} onClick={()=>void open('outlook')}>Outlook {badge('outlook')}</button>
+        <button type="button" className={showTasks?'workspace-tab active':'workspace-tab'} onClick={async()=>{await window.lingua.showDashboard();window.dispatchEvent(new Event('linguahub:dashboard'));setShowTasks(true)}}>Công việc</button>
       </nav>
       <div className="topbar-actions">
         <button type="button" className="icon-button" title="Thu gọn xuống khay hệ thống" aria-label="Thu gọn xuống khay hệ thống" onClick={()=>void window.lingua.hideToTray().catch(()=>setStatus('Chưa thu gọn được xuống khay hệ thống.'))}>▁</button>
@@ -183,6 +219,8 @@ function App() {
     </header>
     <div className="workspace-row">
       <main className="workspace" aria-label="Trang trò chuyện">
+        {showTasks&&<TasksPanel service={activeService} onClose={()=>{setShowTasks(false);void open(activeService==='zalopc'?'whatsapp':activeService)}}/>}
+        {!showTasks&&activeService==='zalopc'&&<ZaloPcPane initial={zaloPc} />}
         {fallbackService ? <div className="workspace-fallback"><h2>Chưa mở được trang trò chuyện</h2><p>Trang này có thể không hỗ trợ chạy bên trong ứng dụng. Anh có thể mở bằng trình duyệt.</p><button onClick={() => void openFallback()}>Mở bằng trình duyệt</button></div> : <div className="workspace-placeholder">Đang mở trang trò chuyện…</div>}
       </main>
       {!panelCollapsed && <div className="panel-resizer" role="separator" aria-label="Kéo để điều chỉnh độ rộng bản dịch" aria-orientation="vertical" onPointerDown={event => { resizing.current = true; event.currentTarget.setPointerCapture(event.pointerId) }} onPointerMove={event => { if (resizing.current) updatePanelWidth(event.clientX, false) }} onPointerUp={event => { if (resizing.current) { resizing.current = false; updatePanelWidth(event.clientX, true) } }} onLostPointerCapture={() => { resizing.current = false }} />}

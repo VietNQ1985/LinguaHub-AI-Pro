@@ -7,6 +7,10 @@ ipcRenderer.on('app:shortcut',(_event,action:string)=>{
   if(queuedShortcuts.length>10)queuedShortcuts.shift()
 })
 contextBridge.exposeInMainWorld('lingua', {
+  openWindowsVoiceTyping:()=>ipcRenderer.invoke('voice:windows'),
+  listTasks:()=>ipcRenderer.invoke('tasks:list'),
+  saveTask:(input:unknown)=>ipcRenderer.invoke('tasks:save',input),
+  extractTasksFromVisible:(service:'whatsapp'|'teams'|'zalo'|'outlook',model:string,requestId:string)=>ipcRenderer.invoke('tasks:extract-visible',service,model,requestId),
   hideToTray:()=>ipcRenderer.invoke('window:tray'),
   getWorkspaceUnread:()=>ipcRenderer.invoke('workspace:unread'),
   onWorkspaceUnread:(callback:(counts:import('../shared/workspace-unread').UnreadCounts)=>void)=>{
@@ -32,6 +36,11 @@ contextBridge.exposeInMainWorld('lingua', {
   disconnectChatGPT: () => ipcRenderer.invoke('chatgpt:disconnect'),
   openChatGPTUsageSettings: () => ipcRenderer.invoke('chatgpt:usage-settings'),
   chatgptModels: () => ipcRenderer.invoke('chatgpt:models'),
+  providerStatus: () => ipcRenderer.invoke('providers:status'),
+  setProviderSecrets: (input: { geminiKey?: string; remoteUrl?: string; remoteToken?: string }) => ipcRenderer.invoke('providers:set', input),
+  setProviderConsent: (provider: 'gemini' | 'remote', enabled: boolean) => ipcRenderer.invoke('providers:consent', provider, enabled),
+  providerModels: (provider: 'gemini' | 'remote') => ipcRenderer.invoke('providers:models', provider),
+  setAlwaysOnTop: (enabled: boolean) => ipcRenderer.invoke('window:always-on-top', enabled),
   chatgptStatus: () => ipcRenderer.invoke('chatgpt:status'),
   getPreferences: () => ipcRenderer.invoke('preferences:get'),
   setPreferences: (input: {theme: string; model: string}) => ipcRenderer.invoke('preferences:set', input),
@@ -51,6 +60,16 @@ contextBridge.exposeInMainWorld('lingua', {
   hasVisibleChatReadAuthorization: () => ipcRenderer.invoke('chat:visible-read-status'),
   stopVisibleChatRead: () => ipcRenderer.invoke('chat:stop-visible-read'),
   readVisibleChat: () => ipcRenderer.invoke('chat:read-visible'),
+  sendChatMessage: (text: string, conversationId: string) => ipcRenderer.invoke('chat:send-direct', text, conversationId),
+  sendConfirm: (value?: boolean) => ipcRenderer.invoke('chat:send-confirm', value),
+  getPermissions: () => ipcRenderer.invoke('permissions:get'),
+  openZaloPc: () => ipcRenderer.invoke('zalopc:open'),
+  zaloPcStatus: () => ipcRenderer.invoke('zalopc:status'),
+  connectZaloPc: () => ipcRenderer.invoke('zalopc:connect'),
+  callZaloPc: (kind: 'voice' | 'video') => ipcRenderer.invoke('zalopc:call', kind),
+  embedZaloPc: (enabled: boolean) => ipcRenderer.invoke('zalopc:embed', enabled),
+  callZaloViaPc: (kind: 'voice' | 'video') => ipcRenderer.invoke('zalo:call-via-pc', kind),
+  setPermissions: (grants: Record<string, boolean>) => ipcRenderer.invoke('permissions:set', grants),
   onVisibleChatChanged: (callback: (change: {service:'whatsapp'|'teams';observedAt:number}) => void) => {
     const listener=(_event:Electron.IpcRendererEvent,change:{service:'whatsapp'|'teams';observedAt:number})=>callback(change)
     ipcRenderer.on('chat:visible-changed',listener)
@@ -60,7 +79,6 @@ contextBridge.exposeInMainWorld('lingua', {
   readMeeting: (token:string)=>ipcRenderer.invoke('meeting:read',token),
   stopMeeting: (token:string)=>ipcRenderer.invoke('meeting:stop',token),
   translateMeeting: (token:string,text:string,id:string)=>ipcRenderer.invoke('meeting:translate',token,text,id),
-  listModels: () => ipcRenderer.invoke('ai:models'),
   writeClipboardText: (text:string) => ipcRenderer.invoke('clipboard:write-text',text),
   runAi: (task: string, text: string, model: string, requestId?: string, options?: {replyFast:boolean}) => ipcRenderer.invoke('ai:run', task, text, model, requestId, options),
   onAiStream: (requestId:string,callback:(delta:string)=>void) => {
@@ -72,7 +90,7 @@ contextBridge.exposeInMainWorld('lingua', {
   testNotification: () => ipcRenderer.invoke('notifications:test'),
   getNotificationPreferences: () => ipcRenderer.invoke('notifications:get'),
   setNotificationPreference: (service: 'whatsapp' | 'teams' | 'zalo', enabled: boolean) => ipcRenderer.invoke('notifications:set', service, enabled),
-  openWorkspace: (service: 'whatsapp' | 'teams' | 'zalo') => ipcRenderer.invoke('workspace:open', service),
+  openWorkspace: (service: 'whatsapp' | 'teams' | 'zalo' | 'outlook') => ipcRenderer.invoke('workspace:open', service),
   showDashboard: () => ipcRenderer.invoke('workspace:dashboard'),
-  openExternal: (service: 'whatsapp' | 'teams' | 'zalo') => ipcRenderer.invoke('workspace:external', service),
+  openExternal: (service: 'whatsapp' | 'teams' | 'zalo' | 'outlook') => ipcRenderer.invoke('workspace:external', service),
 })

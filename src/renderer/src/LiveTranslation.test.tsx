@@ -16,7 +16,7 @@ test('renderer retains streamed Vietnamese during bridge-triggered DOM scans wit
   let finish: (value:unknown)=>void = () => {}
   const runAi = vi.fn(() => new Promise(resolve => {finish=resolve}))
   Object.assign(dom.window,{lingua:{
-    authorizeVisibleChatRead:vi.fn(async()=>true),stopVisibleChatRead:vi.fn(async()=>{}),
+    hasVisibleChatReadAuthorization:vi.fn(async()=>true),authorizeVisibleChatRead:vi.fn(async()=>true),stopVisibleChatRead:vi.fn(async()=>{}),
     readVisibleChat:vi.fn(async()=>({conversationId:'chat-a',messages:[{id:'m1',text:'Hello there',side:'left'}]})),
     onVisibleChatChanged:vi.fn(callback=>{change=callback;return ()=>{}}),
     onAiStream:vi.fn((_id,callback)=>{delta=callback;return ()=>{}}),
@@ -27,7 +27,7 @@ test('renderer retains streamed Vietnamese during bridge-triggered DOM scans wit
   try {
     await act(async()=>{root.render(createElement(LiveTranslation,{model:'local-test'}))})
     expect(container.textContent).toContain('Đang bật dịch tự động')
-    expect(dom.window.lingua.authorizeVisibleChatRead).toHaveBeenCalledTimes(1)
+    expect(dom.window.lingua.hasVisibleChatReadAuthorization).toHaveBeenCalledTimes(1)
     await act(async()=>{delta('Xin chào')})
     expect(container.querySelector('.translation-vietnamese')?.textContent).toBe('Xin chào')
     await act(async()=>{change({observedAt:Date.now()});await new Promise(resolve=>setTimeout(resolve,30))})
@@ -42,7 +42,7 @@ test('default translation respects denied or obsolete read permission',async()=>
  const dom=new JSDOM('<div id="root"></div>');vi.stubGlobal('window',dom.window);vi.stubGlobal('document',dom.window.document);vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT',true)
  let answer:(allowed:boolean)=>void=()=>{}
  const read=vi.fn(),runAi=vi.fn(),authorize=vi.fn(()=>new Promise<boolean>(resolve=>{answer=resolve}))
- Object.assign(dom.window,{lingua:{authorizeVisibleChatRead:authorize,stopVisibleChatRead:async()=>{},readVisibleChat:read,runAi,cancelAi:async()=>true}})
+ Object.assign(dom.window,{lingua:{hasVisibleChatReadAuthorization:authorize,stopVisibleChatRead:async()=>{},readVisibleChat:read,runAi,cancelAi:async()=>true}})
  const container=dom.window.document.querySelector('#root')!,root=createRoot(container)
  try{
   await act(async()=>root.render(createElement(LiveTranslation,{model:'local',active:false})))

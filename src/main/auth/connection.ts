@@ -203,7 +203,13 @@ export class ChatGPTConnection {
       // The ordinary returning sign-in flow still saves the issued ID early for invalid_grant recovery.
       if(!newRegistration)this.registeredClientId=await saveIssuedClientId(this.directory,result.clientId)
       const response=await this.request(TOKEN_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'authorization_code',client_id:result.clientId,code:result.code,code_verifier:pending.verifier,redirect_uri:pending.redirectUri,resource:RESOURCE}),signal:AbortSignal.timeout(30000)})
-      if(!response.ok)throw new Error(`OpenAI chưa hoàn tất trao đổi quyền (${response.status}).`)
+      if(!response.ok){
+        // Surface only the standard OAuth error fields; the body of a failed exchange carries no tokens.
+        const detail=await response.json().then(body=>z.object({error:z.string().max(100).optional(),error_description:z.string().max(300).optional()}).parse(body)).catch(()=>({error:undefined,error_description:undefined}))
+        console.warn('[chatgpt] token exchange failed',response.status,detail.error,detail.error_description)
+        const reason=[detail.error,detail.error_description].filter(Boolean).join(': ')
+        throw new Error(`OpenAI chưa hoàn tất trao đổi quyền (${response.status}${reason?` – ${reason}`:''}).`)
+      }
       const token=z.object({id_token:z.string(),access_token:z.string(),refresh_token:z.string().optional(),expires_in:z.number(),scope:z.string()}).parse(await response.json())
       const metadataResponse=await this.request('https://auth.openai.com/.well-known/openid-configuration',{signal:AbortSignal.timeout(15000)})
       const metadata=z.object({jwks_uri:z.string().url()}).parse(await metadataResponse.json())

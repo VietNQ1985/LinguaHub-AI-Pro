@@ -5,7 +5,7 @@ import type { WorkspaceService } from './notification-policy'
 export const GENERIC_NOTIFICATION_TITLE = 'LinguaHub AI Pro'
 export const GENERIC_NOTIFICATION_BODY = 'Có thông báo mới.'
 
-const services: readonly WorkspaceService[] = ['whatsapp', 'teams', 'zalo']
+const services: readonly WorkspaceService[] = ['whatsapp', 'teams', 'zalo', 'outlook']
 
 export function unreadChangeNeedsNotification(previous: UnreadValue, next: UnreadValue, initialized: boolean) {
   if (!initialized) return false

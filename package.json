@@ -91,10 +91,10 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "deleteAppDataOnUninstall": false,
       "artifactName": "LinguaHub-AI-Pro-Setup-${version}.${ext}",
       "shortcutName": "LinguaHub AI Pro",
-      "uninstallDisplayName": "LinguaHub AI Pro"
+      "uninstallDisplayName": "LinguaHub AI Pro",
+      "deleteAppDataOnUninstall": false
     }
   }
 }

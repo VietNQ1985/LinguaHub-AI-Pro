@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 
 export function AdvancedSettings() {
-  const [notifications, setNotifications] = useState({ whatsapp: false, teams: false, zalo:false })
+  const [notifications, setNotifications] = useState({ whatsapp: false, teams: false, zalo:false, outlook:false })
   const [retention, setRetention] = useState(0)
   const [status, setStatus] = useState('')
   const [busy, setBusy] = useState(false)
@@ -11,7 +11,7 @@ export function AdvancedSettings() {
     void window.lingua.getDataRetentionDays().then(setRetention).catch(() => setStatus('Chưa đọc được thời hạn lưu dữ liệu.'))
   }, [])
 
-  const updateNotification = async (service: 'whatsapp' | 'teams' | 'zalo', enabled: boolean) => {
+  const updateNotification = async (service: 'whatsapp' | 'teams' | 'zalo' | 'outlook', enabled: boolean) => {
     try {
       setNotifications(await window.lingua.setNotificationPreference(service, enabled))
       setStatus('Đã cập nhật quyền thông báo.')
@@ -41,6 +41,7 @@ export function AdvancedSettings() {
     <label className="checkbox-label"><input type="checkbox" checked={notifications.whatsapp} onChange={event => void updateNotification('whatsapp', event.target.checked)} /> Cho phép thông báo WhatsApp</label>
     <label className="checkbox-label"><input type="checkbox" checked={notifications.teams} onChange={event => void updateNotification('teams', event.target.checked)} /> Cho phép thông báo Teams</label>
     <label className="checkbox-label"><input type="checkbox" checked={notifications.zalo} onChange={event => void updateNotification('zalo', event.target.checked)} /> Cho phép thông báo Zalo Web</label>
+    <label className="checkbox-label"><input type="checkbox" checked={notifications.outlook} onChange={event => void updateNotification('outlook', event.target.checked)} /> Cho phép thông báo Outlook</label>
     <button type="button" onClick={() => void window.lingua.testNotification().then(() => setStatus('Windows đã nhận yêu cầu thông báo thử.')).catch(() => setStatus('Không hiển thị được thông báo thử.'))}>Thử thông báo Windows</button>
 
     <h4>Thời hạn giữ dữ liệu học</h4>

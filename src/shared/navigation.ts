@@ -1,7 +1,8 @@
-export function isWorkspaceUrl(service:'whatsapp'|'teams'|'zalo',value:string){
+export function isWorkspaceUrl(service:'whatsapp'|'teams'|'outlook'|'zalo',value:string){
   try{
     const url=new URL(value)
     if(url.protocol!=='https:' || url.username || url.password)return false
+    if(service==='outlook')return !url.port&&['outlook.office.com','outlook.office365.com','outlook.cloud.microsoft','login.microsoftonline.com','login.microsoft.com','login.live.com'].includes(url.hostname)
     // jr is the HTTPS authentication handoff observed after mobile approval.
     if(service==='zalo')return !url.port&&['chat.zalo.me','id.zalo.me','jr.zaloapp.com','jr.chat.zalo.me'].includes(url.hostname)
     return (service==='whatsapp'?/(^|\.)whatsapp\.com$/:/(^|\.)(microsoft\.com|microsoftonline\.com|live\.com|cloud\.microsoft)$/).test(url.hostname)

@@ -1,13 +1,13 @@
-export type ChatService = 'whatsapp' | 'teams'
+export type ChatService = 'whatsapp' | 'teams' | 'outlook' | 'zalo'
 export type ChatDomMessage = { text: string; side: 'left' | 'right' | 'center'; id?: string }
-export type ChatDomSnapshot = { conversationHint: string; messages: ChatDomMessage[] }
+export type ChatDomSnapshot = { conversationHint: string; conversationLabel?: string; messages: ChatDomMessage[] }
 
 /** Builds a fixed, read-only script for the embedded service page. It never accepts page code from the renderer. */
-export function buildVisibleChatReadScript(service: ChatService) {
-  return `(${readVisibleChatPage.toString()})(${JSON.stringify(service)})`
+export function buildVisibleChatReadScript(service: ChatService, maxTextLength=4000) {
+  return `(${readVisibleChatPage.toString()})(${JSON.stringify(service)},${JSON.stringify(Math.max(1000,Math.min(12000,maxTextLength)))})`
 }
 
-function readVisibleChatPage(service: ChatService): ChatDomSnapshot {
+function readVisibleChatPage(service: ChatService, maxTextLength=4000): ChatDomSnapshot {
   const visibleWithin = (element: Element, clip?: DOMRect) => {
     const rect = element.getBoundingClientRect()
     const style = window.getComputedStyle(element)
@@ -28,6 +28,47 @@ function readVisibleChatPage(service: ChatService): ChatDomSnapshot {
       if (found) return found
     }
     return null
+  }
+
+  if (service === 'zalo') {
+    // Zalo Web (checked live 11/2026): each .chat-item is one message row, yours carry .me;
+    // the text sits in [data-component="message-text-content"]; quoted replies are skipped.
+    const zaloRoot = document.querySelector('#messageViewScroll')
+    if (!zaloRoot) return { conversationHint: '', messages: [] }
+    const zaloClip = (document.querySelector('#messageViewContainer') || zaloRoot).getBoundingClientRect()
+    const zaloMessages: ChatDomMessage[] = []
+    for (const item of Array.from(zaloRoot.querySelectorAll('.chat-item')).filter(element => visibleWithin(element, zaloClip)).slice(-60)) {
+      const parts = Array.from(item.querySelectorAll('[data-component="message-text-content"]'))
+        .filter(element => !element.closest('[class*="quote"]') && visibleWithin(element, zaloClip))
+      const text = parts.map(element => (element as HTMLElement).innerText || element.textContent || '')
+        .join('\n').split('\n').map(line => line.replace(/\s+/g, ' ').trim()).filter(Boolean).join('\n').slice(0, maxTextLength)
+      if (text.length < 2) continue
+      const bubble = item.querySelector('[id^="bb_msg_id_"]')
+      const stableId = bubble?.id && bubble.id.length <= 200 ? bubble.id : undefined
+      zaloMessages.push({ text, side: item.classList.contains('me') ? 'right' : 'left', ...(stableId ? { id: stableId } : {}) })
+    }
+    const title = document.querySelector('header#header .header-title') as HTMLElement | null
+    return { conversationHint: (title?.innerText || title?.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 200), messages: zaloMessages }
+  }
+
+  if(service==='outlook'){
+    const pane=first(['[data-app-section="MailReadCompose"]','[aria-label="Reading pane" i]','[aria-label="Ngăn đọc" i]','[role="main"]'])
+    if(!pane||!visibleWithin(pane))return {conversationHint:'',messages:[]}
+    const candidates=Array.from(pane.querySelectorAll('[aria-label="Message body" i], [aria-label="Nội dung thư" i], [data-testid="message-body"], [data-message-body], [role="document"]'))
+      .filter(element=>visibleWithin(element)&&!element.closest('[contenteditable="true"], [role="textbox"], form'))
+    const bodies=candidates.filter(element=>!candidates.some(other=>other!==element&&element.contains(other)))
+    const messages:ChatDomMessage[]=bodies.slice(-20).flatMap(element=>{
+      const text=((element as HTMLElement).innerText||element.textContent||'').trim().slice(0,maxTextLength)
+      if(text.length<2)return []
+      const owner=element.closest('[data-itemid], [data-message-id]')
+      const id=owner?.getAttribute('data-itemid')||owner?.getAttribute('data-message-id')||undefined
+      return [{text,side:'left' as const,...(id&&id.length<=200?{id}:{})}]
+    })
+    const subject=pane.querySelector('[role="heading"], h1, h2')
+    const owner=pane.closest('[data-conversation-id]')||pane.querySelector('[data-conversation-id]')
+    const identity=owner?.getAttribute('data-conversation-id')
+    const conversationLabel=(subject?.textContent||'').replace(/\s+/g,' ').trim().slice(0,200)
+    return {conversationHint:identity?`id:${identity}`:conversationLabel,conversationLabel,messages}
   }
 
   const root = service === 'whatsapp'
@@ -64,14 +105,21 @@ function readVisibleChatPage(service: ChatService): ChatDomSnapshot {
       .map(line => line.replace(/\s+/g, ' ').trim())
       .filter(Boolean)
       .join('\n')
-      .slice(0, 4000)
+      .slice(0, maxTextLength)
     if (text.length < 2) continue
     const rect = bubble.getBoundingClientRect()
     const key = `${Math.round(rect.left / 8)}:${Math.round(rect.top / 8)}:${text}`
     if (seen.has(key)) continue
     seen.add(key)
     const className = typeof bubble.className === 'string' ? bubble.className : ''
-    const side = /message-out|message-self|own-message/i.test(className) ? 'right' : /message-in|message-other/i.test(className) ? 'left' : 'center'
+    let side: ChatDomMessage['side'] = /message-out|message-self|own-message/i.test(className) || bubble.closest('.message-out') ? 'right' : /message-in|message-other/i.test(className) || bubble.closest('.message-in') ? 'left' : 'center'
+    // WhatsApp Web (11/2026) no longer marks direction in classes or data-id; your messages hug the right edge.
+    if (side === 'center' && service === 'whatsapp' && clip) {
+      const leftGap = rect.left - clip.left
+      const rightGap = clip.right - rect.right
+      if (rightGap + 40 < leftGap) side = 'right'
+      else if (leftGap + 40 < rightGap) side = 'left'
+    }
     const stableId = [bubble.getAttribute('data-id'), bubble.getAttribute('data-message-id'), bubble.id]
       .map(value => value?.trim() || '')
       .find(value => value.length >= 1 && value.length <= 200)
@@ -93,5 +141,5 @@ function readVisibleChatPage(service: ChatService): ChatDomSnapshot {
     .replace(/\s+/g, ' ').trim().slice(0, 200)
   const conversationHint = stableConversationId ? `id:${stableConversationId}` : stableConversationLabel ? `label:${stableConversationLabel}` : primaryHeaderLine
 
-  return { conversationHint, messages }
+  return { conversationHint, conversationLabel:primaryHeaderLine, messages }
 }

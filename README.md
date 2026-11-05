@@ -1,3 +1,5 @@
+> Bản Electron gọn 05/11/2026: thêm Outlook Web, bỏ Zoom/Meet, Ollama và Whisper. Chi tiết và giới hạn: [docs/electron-lite-outlook.md](docs/electron-lite-outlook.md).
+
 # LinguaHub AI Pro
 
 LinguaHub mở WhatsApp Web hoặc Microsoft Teams Web trong cửa sổ riêng và hiển thị bản dịch tiếng Việt ở panel bên phải. Ứng dụng không tự gửi tin nhắn.
@@ -5,9 +7,9 @@ LinguaHub mở WhatsApp Web hoặc Microsoft Teams Web trong cửa sổ riêng v
 ## Dịch tin nhắn đang hiển thị
 
 1. Mở WhatsApp hoặc Microsoft Teams trong LinguaHub và đăng nhập.
-2. Chọn ChatGPT trong **Cài đặt** (đăng nhập bằng tài khoản ChatGPT đã liên kết) hoặc chọn Ollama chạy trên máy.
+2. Chọn ChatGPT trong **Cài đặt** (đăng nhập bằng tài khoản ChatGPT đã liên kết).
 3. Mở **Dịch tự động** → **Bật dịch** và cho phép LinguaHub đọc chữ trong chat.
-4. Nếu dùng ChatGPT, xác nhận thêm việc gửi chữ tin nhắn hiển thị đến OpenAI. Ollama không gửi nội dung ra khỏi máy.
+4. Nếu dùng ChatGPT, xác nhận thêm việc gửi chữ tin nhắn hiển thị đến OpenAI.
 5. LinguaHub đọc các bong bóng tin nhắn đang hiển thị qua DOM của trang, tự phát hiện tiếng Anh, dịch sang tiếng Việt và bỏ qua tin không phải tiếng Anh. **Không chụp màn hình, không dùng OCR và không đọc chat đang ẩn.** Có thể mở mục “Cách đọc tin nhắn” để xem chữ đã đọc hoặc nhấn **Tạm dừng**.
 
 ## Gợi ý trả lời theo cuộc trò chuyện
@@ -16,7 +18,7 @@ Trong **Gợi ý trả lời cho chat này**, nhấn **Tạo 3 gợi ý** để 
 
 LinguaHub hiện chỉ sao chép bản tiếng Anh để anh tự dán, kiểm tra người nhận và bấm gửi trong WhatsApp/Teams. Nút gửi trực tiếp bị vô hiệu hóa vì app chưa có cơ chế xác thực đúng người nhận và xác nhận tin đã gửi. Zalo Web chưa được đọc/dịch hội thoại; composer trên Zalo chỉ dịch câu anh tự nhập, không có ngữ cảnh chat. Xem [ma trận hỗ trợ nhắn tin V2](docs/v2-messaging-capabilities.md).
 
-Composer cần quyền đọc chat đang hiển thị và quyền ChatGPT cloud riêng khi chọn ChatGPT; Ollama xử lý trên máy. Nhập giọng nói hiện dùng Windows Win+H, không phải microphone ghi âm tích hợp.
+Composer cần quyền đọc chat đang hiển thị và quyền ChatGPT cloud riêng khi chọn ChatGPT. Nhập giọng nói hiện dùng Windows Win+H, không phải microphone ghi âm tích hợp.
 
 Trong Cài đặt, model mặc định là **GPT-6 Luna**. Mức suy luận mặc định **Max** áp dụng cho gợi ý trả lời và tác vụ AI khác; dịch có mức riêng mặc định **Low**. **Ưu tiên tốc độ khi dịch** cũng chỉ áp dụng cho dịch và dùng Low. Anh có thể chọn mức dịch riêng mà không đổi mức của tác vụ khác.
 

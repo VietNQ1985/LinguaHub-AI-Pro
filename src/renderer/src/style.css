@@ -231,3 +231,66 @@ h2, h3, h4 { color: var(--text); }
 .meeting-modes button[aria-pressed="true"] {background:var(--accent);color:white;border-color:var(--accent);font-weight:600;}
 .meeting-modes button:disabled {opacity:.5;cursor:default;}
 .meeting-hint {margin:8px 12px;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--muted);}
+
+/* Caption options */
+.meeting-modes button {white-space:nowrap;font-size:13px;}
+.caption-settings label:not(.checkbox-label) {display:block;color:var(--text);font-size:13px;font-weight:600;margin:14px 0 6px;}
+.caption-settings select {display:block;width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:13px;}
+.caption-settings .checkbox-label {margin-top:14px;font-size:13px;}
+
+/* Settings: text inputs match the selects; provider cards reuse .notice */
+.settings-view input[type="password"], .settings-view input[type="url"] {display:block;width:100%;padding:12px;border:1px solid var(--border);border-radius:9px;background:var(--surface);color:var(--text);font-size:14px;}
+.provider-card summary .provider-pill {float:right;}
+.provider-card[open] summary {margin-bottom:6px;}
+.provider-card label:not(.checkbox-label) {font-size:13px;}
+.provider-card .checkbox-label {font-size:13px;margin-top:12px;}
+.provider-card .settings-actions {margin-top:12px;}
+.provider-card .settings-actions button:disabled {opacity:.5;cursor:default;}
+.provider-card .helper-text {margin:4px 0 0;}
+.provider-pill {font-size:11px;font-weight:600;color:var(--muted);background:var(--soft);border:1px solid var(--border);border-radius:999px;padding:2px 8px;}
+.provider-pill-on {color:var(--success);border-color:var(--success);}
+/* Separates the meeting chat translation from the spoken-translation section above it. */
+.meeting-chat-title { margin: 8px 12px 0; padding-top: 14px; border-top: 1px solid var(--border); font-size: 14px; font-weight: 600; color: var(--text); }
+/* Like the chat itself: your own messages on the right, other people's on the left. */
+.translation-message-other { align-self: flex-start; max-width: 88%; }
+.translation-message-self { align-self: flex-end; max-width: 88%; background: color-mix(in srgb, var(--accent) 8%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 25%, var(--border)); }
+/* Voice input styles retained for layout compatibility. */
+.voice-input { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0; }
+.voice-input .helper-text { margin: 0; flex: 1 1 160px; }
+.voice-input-live { border-color: var(--danger, #d93025); color: var(--danger, #d93025); }
+.voice-input > button { white-space: nowrap; }
+/* Voice button and translate button share one row; the voice status line goes underneath. */
+.composer-voice-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 8px; align-items: stretch; margin-top: 11px; }
+.composer-voice-row .voice-input { display: contents; }
+.composer-voice-row .voice-input > button { order: 0; margin: 0; }
+.composer-voice-row .composer-translate { order: 1; width: 100%; margin: 0; }
+.composer-voice-row .voice-input > .helper-text { order: 2; grid-column: 1 / -1; }
+/* Permission checklist: first-run card in the panel and a group in Settings. */
+.permissions-panel h3 { font-size: 15px; margin: 0 0 6px; }
+.permissions-first-run { margin: 10px 12px 4px; }
+.permissions-list { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+.permissions-item { align-items: flex-start; }
+.permissions-item span { display: flex; flex-direction: column; }
+.permissions-item small { color: var(--muted); font-size: 12px; line-height: 1.35; }
+.permissions-panel .settings-actions .primary-button { background: var(--accent); border-color: var(--accent); color: #fff; }
+/* Zalo PC tab: no embedded page, just the connection card and call buttons. */
+.zalopc-pane { height: 100%; display: flex; align-items: flex-start; justify-content: center; padding: 48px 24px; overflow: auto; }
+.zalopc-card { width: min(460px, 100%); border: 1px solid var(--border); border-radius: 12px; background: var(--surface); padding: 20px; display: flex; flex-direction: column; gap: 10px; }
+.zalopc-card h2 { margin: 0; font-size: 18px; }
+.zalopc-state { margin: 0; font-weight: 600; color: var(--muted); }
+.zalopc-state-on { color: var(--success); }
+.zalopc-calls { display: flex; gap: 8px; flex-wrap: wrap; }
+.zalopc-calls button { flex: 1 1 140px; }
+.zalopc-strip { height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-bottom: 1px solid var(--border); background: var(--surface); overflow: hidden; white-space: nowrap; }
+.zalopc-strip button { padding: 4px 10px; font-size: 13px; }
+.zalopc-strip .helper-text { margin: 0; overflow: hidden; text-overflow: ellipsis; }
+.zalo-call-bar { margin: 0 12px 10px; }
+.zalo-call-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.zalo-call-bar .helper-text { margin: 6px 0 0; }
+
+/* Preserve email paragraphs, numbered sections and lists in translated/source text. */
+.translation-vietnamese, .translation-original, .translation-source { white-space: pre-wrap; tab-size: 4; }
+
+.tasks-panel{position:absolute;inset:0;z-index:5;background:var(--surface);padding:24px;overflow:auto}.tasks-columns{display:grid;grid-template-columns:minmax(220px,1fr) minmax(260px,1fr);gap:24px}.tasks-columns label{display:block;margin:10px 0}.tasks-columns input,.tasks-columns textarea,.tasks-columns select{display:block;width:100%;padding:9px}.task-card{display:block;width:100%;text-align:left;margin:10px 0;padding:14px}.task-card small{display:block;margin-top:8px}
+.task-capture-box,.task-suggestions{margin:16px 0;padding:16px;border:1px solid var(--border);border-radius:12px;background:var(--soft)}.task-capture-box h3,.task-suggestions h3{margin:0 0 8px}.task-capture-box p,.task-suggestions>p{margin:6px 0 12px;color:var(--muted);line-height:1.5}.task-capture-box small{display:block;margin-top:9px;color:var(--muted);line-height:1.45}.task-capture-status{font-weight:600}.task-suggestion,.task-source-note{margin:10px 0;padding:12px;border:1px solid var(--border);border-radius:9px;background:var(--surface)}.task-suggestion>p{margin:7px 0;color:var(--muted)}.task-suggestion blockquote,.task-source-note blockquote{margin:8px 0;padding-left:10px;border-left:3px solid var(--accent);color:var(--muted);white-space:pre-wrap;overflow-wrap:anywhere}.task-suggestion button,.task-source-note button{margin-top:8px}.task-source-note details{margin-top:8px}.task-source-note summary{color:var(--accent);cursor:pointer}
+@media(max-width:850px){.tasks-panel{padding:16px}.tasks-columns{grid-template-columns:minmax(0,1fr)}}

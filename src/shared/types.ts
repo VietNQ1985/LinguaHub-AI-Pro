@@ -3,6 +3,7 @@ export type AppRoute =
   | 'dashboard'
   | 'whatsapp'
   | 'teams'
+  | 'outlook'
   | 'live-translation'
   | 'ai-reply'
   | 'coach'
@@ -10,14 +11,13 @@ export type AppRoute =
   | 'speaking'
   | 'settings'
 
-export type AiProviderId = 'chatgpt' | 'ollama'
+export type AiProviderId = 'chatgpt'
 export type ThemeMode = 'dark' | 'light' | 'system'
 
 export interface AppSettings {
   theme: ThemeMode
   aiProvider: AiProviderId
   chatgptModel: string
-  ollamaModel: string
   captureConsent: boolean
   backgroundAiConsent: boolean
   saveLearningData: boolean
@@ -30,7 +30,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   theme: 'dark',
   aiProvider: 'chatgpt',
   chatgptModel: '',
-  ollamaModel: '',
   captureConsent: false,
   backgroundAiConsent: false,
   saveLearningData: true,

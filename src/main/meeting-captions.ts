@@ -1,4 +1,4 @@
-export function meetingCaptionScript(){return `(${readMeetingCaptions.toString()})()`}
+export function meetingCaptionScript(_service: 'teams' = 'teams'){ return `(${readMeetingCaptions.toString()})()` }
 function readMeetingCaptions(){
  const visible=(element:Element)=>{const r=element.getBoundingClientRect(),s=getComputedStyle(element);return r.width>0&&r.height>0&&r.bottom>0&&r.top<innerHeight&&s.display!=='none'&&s.visibility!=='hidden'}
  const diagnostics={captionMarkers:[...new Set([...document.querySelectorAll('[data-tid], [data-testid]')].filter(visible).flatMap(element=>[element.getAttribute('data-tid'),element.getAttribute('data-testid')]).filter((value):value is string=>!!value&&/^(closed[-_]?caption|caption)[a-z0-9_-]{0,90}$/i.test(value)))].slice(0,40),iframeCount:document.querySelectorAll('iframe').length}

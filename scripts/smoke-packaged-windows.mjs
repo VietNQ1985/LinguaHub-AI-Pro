@@ -24,13 +24,14 @@ try{
   const env={...process.env,
     LINGUAHUB_STARTUP_SMOKE:'1',
     LINGUAHUB_SMOKE_MARKER:smokeMarker,
+    LINGUAHUB_SMOKE_USER_DATA:join(isolatedRoot,'linguahub-user-data'),
     APPDATA:join(isolatedRoot,'roaming'),
     LOCALAPPDATA:join(isolatedRoot,'local'),
     ProgramData:join(isolatedRoot,'program-data'),
     TEMP:join(isolatedRoot,'temp'),
     TMP:join(isolatedRoot,'temp'),
   }
-  await Promise.all([env.APPDATA,env.LOCALAPPDATA,env.ProgramData,env.TEMP].map(directory=>mkdir(directory,{recursive:true})))
+  await Promise.all([env.LINGUAHUB_SMOKE_USER_DATA,env.APPDATA,env.LOCALAPPDATA,env.ProgramData,env.TEMP].map(directory=>mkdir(directory,{recursive:true})))
   for(const key of Object.keys(env))if(/(^|_)(?:API_KEY|KEY|TOKEN|SECRET|PASSWORD|CREDENTIALS?)(?:_|$)/i.test(key)||key==='CODEX_HOME')delete env[key]
   delete env.ELECTRON_RENDERER_URL
   delete env.ELECTRON_RUN_AS_NODE

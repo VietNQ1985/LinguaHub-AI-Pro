@@ -20,7 +20,7 @@ test('communication warnings reject invented evidence',async()=>{
 })
 test('rejects invented source evidence in conversation analysis',async()=>{
   vi.stubGlobal('fetch',vi.fn().mockResolvedValue({ok:true,json:async()=>({message:{content:JSON.stringify({summary:'Tóm tắt',actions:[{text:'Gửi báo cáo',evidence:'I promise to send it tomorrow',deadline:null}],decisions:[],questions:[]})}})}))
-  await expect(runLocalAi('summary','Please review the report.','local')).rejects.toThrow('dẫn chứng')
+  await expect(runLocalAi('summary','Please review the report.','test',async()=>JSON.stringify({summary:'Tóm tắt',actions:[{text:'Gửi báo cáo',evidence:'I promise to send it tomorrow',deadline:null}],decisions:[],questions:[]}))).rejects.toThrow('dẫn chứng')
 })
 test('accepts grounded follow-up suggestions and rejects invented evidence',async()=>{
   const response={summary:'Cần xác nhận thời gian họp.',actions:[],decisions:[],questions:[{text:'Chưa có câu trả lời về thời gian họp.',evidence:'Could you confirm the meeting time?'}],followUps:[{text:'Hỏi lại thời gian họp nếu chưa nhận được phản hồi.',evidence:'Could you confirm the meeting time?'}]}
@@ -34,13 +34,7 @@ test('rejects oversized content before any request', async()=>{
 })
 test('rejects malformed translation instead of presenting it as valid',async()=>{
   vi.stubGlobal('fetch',vi.fn().mockResolvedValue({ok:true,json:async()=>({message:{content:'{"translation":12}'}})}))
-  await expect(runLocalAi('translate','Hello','local')).rejects.toThrow()
-})
-test('only sends text to the fixed local endpoint',async()=>{
-  const fetch = vi.fn().mockResolvedValue(new Response('{"message":{"content":"{\\"translation\\":\\"Xin chào\\",\\"explanation\\":\\"Lời chào\\"}"},"done":true}\n'))
-  vi.stubGlobal('fetch',fetch)
-  await expect(runLocalAi('translate','Hello','local')).resolves.toMatchObject({translation:'Xin chào'})
-  expect(fetch.mock.calls[0][0]).toBe('http://127.0.0.1:11434/api/chat')
+  await expect(runLocalAi('translate','Hello','test',async()=>'{"translation":12}')).rejects.toThrow()
 })
 test('translates a batch using exactly the requested message ids',async()=>{
   const input=JSON.stringify({messages:[{id:'m0',text:'Please send the report.'},{id:'m1',text:'I will review it.'}]})
@@ -74,17 +68,6 @@ test('streams the newest message as plain Vietnamese without an explanation',asy
   expect(instructions).not.toContain('explanation')
   expect(deltas).toEqual(['Vui lòng xác nhận ','đơn mua hàng.'])
   expect(result).toEqual({translation:'Vui lòng xác nhận đơn mua hàng.',explanation:''})
-})
-test('streams local Ollama output for the latest message without JSON mode',async()=>{
-  const deltas:string[]=[]
-  const fetch=vi.fn().mockResolvedValue(new Response('{"message":{"content":"Xin "},"done":false}\n{"message":{"content":"chào."},"done":true}\n'))
-  vi.stubGlobal('fetch',fetch)
-  const result=await runLocalAi('translateLatest',JSON.stringify({text:'Good morning.'}),'local',undefined,undefined,undefined,delta=>deltas.push(delta)) as {translation:string}
-  expect(result.translation).toBe('Xin chào.')
-  expect(deltas).toEqual(['Xin ','chào.'])
-  const body=JSON.parse(String(fetch.mock.calls[0][1]?.body))
-  expect(body).toMatchObject({stream:true})
-  expect(body).not.toHaveProperty('format')
 })
 test('marks non-English visible chat messages for the renderer to skip',async()=>{
   const input=JSON.stringify({messages:[{id:'m0',text:'Please send the report.'},{id:'m1',text:'Vui lòng gửi báo cáo.'}]})
@@ -149,4 +132,18 @@ test('translates a Vietnamese reply using bounded chat context, tone and ERP ter
   expect(reasoningEffortForTask('replyTranslationFromChat','max','low',false)).toBe('low')
   expect(reasoningEffortForTask('replyTranslationFromChat','max','low',true)).toBe('low')
   await expect(runLocalAi('replyTranslationFromChat',JSON.stringify({...JSON.parse(input),messages:[]}), 'local',async()=>JSON.stringify({translation:'I will check.'}))).rejects.toThrow()
+})
+
+test('never falls back to a local model when no provider is selected',async()=>{
+ const fetch=vi.fn();vi.stubGlobal('fetch',fetch)
+ await expect(runLocalAi('translate','Hello','removed-model')).rejects.toThrow('Ollama đã được gỡ')
+ expect(fetch).not.toHaveBeenCalled()
+})
+
+test('email translation retains paragraph and list instructions and returned line breaks',async()=>{
+ const source='Dear team,\n\nPlease review:\n- Client Portal\n- LIMS\n\n1. Security contact';
+ const translated='Kính gửi đội ngũ,\n\nVui lòng xem xét:\n- Cổng khách hàng\n- LIMS\n\n1. Đầu mối bảo mật';
+ let prompt='';
+ const result=await runLocalAi('translateLatest',JSON.stringify({text:source}),'test',async(_m,input,instructions)=>{expect(input).toBe(source);prompt=instructions;return translated})
+ expect(prompt).toContain('Preserve paragraph breaks');expect(prompt).toContain('bullet lists');expect(result).toMatchObject({translation:translated})
 })

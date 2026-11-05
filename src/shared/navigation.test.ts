@@ -31,3 +31,8 @@ test('Zalo storage handoff does not grant device permissions or foreign origins'
 test('Zalo secondary handoff remains limited to its exact HTTPS origin',()=>{
  for(const url of ['https://jr.chat.zalo.me.evil.test','https://other.chat.zalo.me','http://jr.chat.zalo.me','https://user:pass@jr.chat.zalo.me','https://jr.chat.zalo.me:8443'])expect(isWorkspaceUrl('zalo',url)).toBe(false)
 })
+
+test('Outlook permits Microsoft mail and sign-in only',()=>{
+ for(const url of ['https://outlook.office.com/mail/','https://outlook.office365.com/mail/','https://outlook.cloud.microsoft/mail/','https://login.microsoftonline.com/common/oauth2/authorize'])expect(isWorkspaceUrl('outlook',url)).toBe(true)
+ for(const url of ['https://outlook.office.com.evil.invalid/mail/','http://outlook.office.com/mail/','https://user@outlook.office.com/','https://outlook.office.com:8443/','https://mail.evil.invalid/'])expect(isWorkspaceUrl('outlook',url)).toBe(false)
+})

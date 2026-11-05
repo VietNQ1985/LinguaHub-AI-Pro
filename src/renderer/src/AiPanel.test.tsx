@@ -11,7 +11,7 @@ test('switching chat cancels pending suggestions and rejects late output',async(
  const dom=new JSDOM('<div id="root"></div>');vi.stubGlobal('window',dom.window);vi.stubGlobal('document',dom.window.document);vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT',true)
  let changed=()=>{};let chat='a';let finish:(value:unknown)=>void=()=>{}
  const cancelAi=vi.fn(async()=>true)
- Object.assign(dom.window,{lingua:{getPreferences:async()=>({model:'local',theme:'light'}),getReasoningEffort:async()=>'max',getTranslationReasoningEffort:async()=>'low',getFastMode:async()=>false,hasVisibleChatReadAuthorization:async()=>true,readVisibleChat:async()=>({conversationId:chat,messages:[{side:'left',text:'Hello'}]}),runAi:vi.fn(()=>new Promise(resolve=>{finish=resolve})),cancelAi,onVisibleChatChanged:(callback:()=>void)=>{changed=callback;return ()=>{}}}})
+ Object.assign(dom.window,{lingua:{getPreferences:async()=>({model:'chatgpt:test-model',theme:'light'}),getReasoningEffort:async()=>'max',getTranslationReasoningEffort:async()=>'low',getFastMode:async()=>false,allowCloud:async()=>true,allowBackgroundCloud:async()=>true,hasVisibleChatReadAuthorization:async()=>true,readVisibleChat:async()=>({conversationId:chat,messages:[{side:'left',text:'Hello'}]}),runAi:vi.fn(()=>new Promise(resolve=>{finish=resolve})),cancelAi,onVisibleChatChanged:(callback:()=>void)=>{changed=callback;return ()=>{}}}})
  const container=dom.window.document.querySelector('#root')!;const root=createRoot(container)
  try{
  await act(async()=>root.render(createElement(AiPanel)))
@@ -33,7 +33,7 @@ for(const stage of ['completed','context-read','final-read'] as const){
  let changed=()=>{},chat='a',reads=0;let release:(value:any)=>void=()=>{};let finish:(value:any)=>void=()=>{}
  const runAi=vi.fn(()=>new Promise(resolve=>{finish=resolve}))
  const read=vi.fn(()=>{reads++;if((stage==='context-read'&&reads===1)||(stage==='final-read'&&reads===2))return new Promise(resolve=>{release=resolve});return Promise.resolve({conversationId:chat,messages:[{side:'left',text:'Hello'}]})})
- Object.assign(dom.window,{lingua:{getPreferences:async()=>({model:'local',theme:'light'}),getReasoningEffort:async()=>'max',getTranslationReasoningEffort:async()=>'low',getFastMode:async()=>false,hasVisibleChatReadAuthorization:async()=>true,readVisibleChat:read,runAi,cancelAi:vi.fn(async()=>true),onVisibleChatChanged:(callback:()=>void)=>{changed=callback;return ()=>{}}}})
+ Object.assign(dom.window,{lingua:{getPreferences:async()=>({model:'chatgpt:test-model',theme:'light'}),getReasoningEffort:async()=>'max',getTranslationReasoningEffort:async()=>'low',getFastMode:async()=>false,allowCloud:async()=>true,allowBackgroundCloud:async()=>true,hasVisibleChatReadAuthorization:async()=>true,readVisibleChat:read,runAi,cancelAi:vi.fn(async()=>true),onVisibleChatChanged:(callback:()=>void)=>{changed=callback;return ()=>{}}}})
  const container=dom.window.document.querySelector('#root')!;const root=createRoot(container)
  try{
  await act(async()=>root.render(createElement(AiPanel)))

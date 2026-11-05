@@ -18,7 +18,7 @@ Hai `WebContentsView` giữ sống khi chuyển dịch vụ hoặc ẩn ở màn
 
 ## AI
 
-ChatGPT dùng OAuth PKCE qua trình duyệt hệ thống và callback loopback, ID token được xác minh bằng JWKS/issuer/audience/nonce. Token được mã hóa bằng Electron safeStorage, làm mới theo hạn và thu hồi khi người dùng ngắt kết nối. Model catalog theo quyền tài khoản; Responses API chạy `store=false`, `stream=true`. Ollama gọi endpoint cục bộ. Không dùng API key.
+ChatGPT dùng OAuth PKCE qua trình duyệt hệ thống và callback loopback, ID token được xác minh bằng JWKS/issuer/audience/nonce. Token được mã hóa bằng Electron safeStorage, làm mới theo hạn và thu hồi khi người dùng ngắt kết nối. Model catalog theo quyền tài khoản; Responses API chạy `store=false`, `stream=true`. Không dùng API key.
 
 Kết quả AI được kiểm tra bằng Zod. Gợi ý trả lời yêu cầu đủ ba kiểu; tóm tắt/cảnh báo và gợi ý theo dõi phải có dẫn chứng khớp nguyên văn. Kiểm tra cấu trúc không chứng minh mọi kết luận AI chính xác. Tình trạng inference ChatGPT phụ thuộc quota dùng chung của tài khoản.
 

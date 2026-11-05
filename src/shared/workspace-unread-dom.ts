@@ -1,8 +1,9 @@
-type Service='whatsapp'|'teams'|'zalo'
+type Service='whatsapp'|'teams'|'zalo'|'outlook'
 import type {UnreadValue} from './workspace-unread'
 const selectors:Record<Service,string>={
  whatsapp:'[data-testid="icon-unread-count"], [data-testid="unread-count"], [aria-label*="unread message" i], [aria-label*="tin nhắn chưa đọc" i]',
  teams:'[data-tid*="badge" i], [data-testid*="badge" i], [aria-label*="unread" i], [aria-label*="chưa đọc" i], [data-tid*="app-bar"] .fui-Badge',
+ outlook:'[role="navigation"] [aria-label*="unread" i], [role="tree"] [aria-label*="unread" i], [role="tree"] [aria-label*="chưa đọc" i]',
  zalo:'.z-noti-badge, .unread-count, .unread-badge, .nav-item .badge, .leftbar .badge, #message-tab .badge, [class*="unread-count"], [class*="unread-badge"], [class*="__unread"], [aria-label*="chưa đọc" i]',
 }
 const aggregateRoot='nav, [role="navigation"], .leftbar, .left-menu, #main-tab, .nav-tabs, [data-tid="app-bar"], [data-tid="app-bar-static"]'

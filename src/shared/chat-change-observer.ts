@@ -8,10 +8,18 @@ const chatRootSelectors = [
   '[data-tid="chat-pane-messageList"]',
   '[data-tid="chat-pane-message-list"]',
   '[data-tid="chat-pane"]',
+  // Outlook visible reading pane; never watch the compose editor.
+  '[data-app-section="MailReadCompose"]',
+  '[aria-label="Reading pane" i]',
+  '[aria-label="Ngăn đọc" i]',
+  // Zalo Web message list.
+  '#messageViewScroll',
+  '[aria-label*="chat message" i]',
+  '[aria-label*="in-call message" i]',
   '[role="log"]',
   '#main',
 ]
-const headerSelectors = ['#main header', '#main [data-testid="conversation-info-header"]', '[data-tid="chat-pane-header"]', 'main header']
+const headerSelectors = ['header#header .header-title', '#main header', '#main [data-testid="conversation-info-header"]', '[data-tid="chat-pane-header"]', 'main header']
 const chatRootSelector = chatRootSelectors.join(',')
 const headerSelector = headerSelectors.join(',')
 
