@@ -1,0 +1,25 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "LinguaHub AI Pro Rust",
+  "version": "0.2.0",
+  "identifier": "com.linguahub.ai.pro.rust",
+  "build": {
+    "frontendDist": "../dist-tauri",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "npm run dev:tauri-ui",
+    "beforeBuildCommand": "npm run build:tauri-ui"
+  },
+  "app": {
+    "windows": [],
+    "withGlobalTauri": true,
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src ipc: http://ipc.localhost"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": ["../assets/linguahub.ico"],
+    "windows": { "nsis": { "displayLanguageSelector": false } }
+  }
+}

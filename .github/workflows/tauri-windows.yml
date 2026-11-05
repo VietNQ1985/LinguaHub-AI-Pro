@@ -1,0 +1,47 @@
+name: Tauri Rust Windows App
+on:
+  push:
+    branches: [feature/rust-core-migration-v1]
+    paths:
+      - 'src-tauri/**'
+      - 'tauri-ui/**'
+      - 'rust/**'
+      - 'vite.tauri.config.ts'
+      - 'package.json'
+      - 'assets/**'
+      - '.github/workflows/tauri-windows.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-tauri:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: npm }
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with: { workspaces: "src-tauri -> target" }
+      - run: npm ci
+      - run: npm run build:tauri-ui
+      - run: npm install --no-save --package-lock=false @tauri-apps/cli@^2
+      - run: npx tauri build --ci
+      - run: |
+          $files = Get-ChildItem src-tauri/target/release/bundle/nsis/*.exe
+          if ($files.Count -lt 1) { throw "NSIS installer missing" }
+          foreach ($file in $files) {
+            if ($file.Length -lt 1MB) { throw "Installer too small: $($file.Name)" }
+            Get-FileHash $file.FullName -Algorithm SHA256 | Format-List
+          }
+        shell: pwsh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LinguaHub-Tauri-Rust-Windows
+          path: src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+          retention-days: 30

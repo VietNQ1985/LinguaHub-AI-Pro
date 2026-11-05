@@ -15,7 +15,7 @@ const targets=[['nsis',setupName],['portable',portableName]]
 
 function runBuilder(target,configPath){
   return new Promise((resolvePromise,reject)=>{
-    const child=spawn(process.execPath,[join(root,'node_modules/electron-builder/cli.js'),'--win',target,'--x64','--config',configPath],{cwd:root,stdio:'inherit',windowsHide:true})
+    const child=spawn(process.execPath,[join(root,'node_modules/electron-builder/cli.js'),'--win',target,'--x64','--config',configPath,'--publish','never'],{cwd:root,stdio:'inherit',windowsHide:true})
     child.once('error',reject)
     child.once('exit',code=>code===0?resolvePromise():reject(new Error(`electron-builder ${target} завершився з кодом ${code??'невідомо'}`)))
   })
