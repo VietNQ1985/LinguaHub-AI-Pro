@@ -1,7 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use arboard::Clipboard;
-use linguahub_core::has_cloud_consent_for_task;
 use regex::Regex;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -101,7 +100,7 @@ fn persist_preferences(state: &RuntimeState) -> Result<(), String> {
     fs::write(&tmp, data).map_err(|_| "could not write settings")?;
     fs::rename(&tmp, &state.storage).map_err(|_| "could not persist settings".into())
 }
-fn lock(state: &tauri::State<'_, SharedState>) -> Result<std::sync::MutexGuard<'_, RuntimeState>, String> {
+fn lock<'a>(state: &'a tauri::State<'a, SharedState>) -> Result<std::sync::MutexGuard<'a, RuntimeState>, String> {
     state.0.lock().map_err(|_| "application state unavailable".into())
 }
 
