@@ -53,7 +53,7 @@ fn render(base: &tauri::image::Image<'_>, total: u32) -> tauri::image::Image<'st
         };
         for (row, bits) in glyph.iter().enumerate() {
             for col in 0..3 {
-                if bits & (1 << (2-col)) != 0 {
+                if (*bits & (1u8 << (2 - col))) != 0 {
                     for dy in 0..scale {
                         for dx in 0..scale {
                             set(&mut pixels, start_x + index as i32 * (digit_width + scale) + col * scale + dx, start_y + row as i32 * scale + dy, [255, 255, 255, 255]);
