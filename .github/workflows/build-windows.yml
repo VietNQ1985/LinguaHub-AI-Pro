@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/linguahub-v2-messaging
+      - feature/rust-core-migration-v1
   pull_request:
     branches:
       - main
@@ -32,11 +33,19 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run package:windows
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --manifest-path rust/Cargo.toml --release --package linguahub-core
       - run: node scripts/verify-windows-package.mjs
       - run: node scripts/smoke-packaged-windows.mjs
       - uses: actions/upload-artifact@v4
         with:
           name: LinguaHub-AI-Pro-Windows
           path: release/*.exe
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LinguaHub-Rust-Core-CLI-Windows
+          path: rust/target/release/linguahub-core.exe
           if-no-files-found: error
           retention-days: 30
