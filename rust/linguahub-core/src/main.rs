@@ -1,9 +1,9 @@
 //! JSON Lines protocol, designed for a future Tauri command/sidecar adapter.
 //! Writes only structured results to stdout; message text must not be logged.
 use linguahub_core::{
-    can_copy_preview, has_cloud_consent_for_task, message_identity_keys,
-    next_translation_batch, recent_chat_context, validate_composer, ChatMessage,
-    ComposerRequest, IdentityMessage, PreviewGuard, QueueItem,
+    can_copy_preview, has_cloud_consent_for_task, message_identity_keys, next_translation_batch,
+    recent_chat_context, validate_composer, ChatMessage, ComposerRequest, IdentityMessage,
+    PreviewGuard, QueueItem,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -51,7 +51,11 @@ fn handle(line: &str) -> Result<Value, String> {
             items,
             priority_key,
             prioritize_newest,
-        } => json!(next_translation_batch(&items, priority_key.as_deref(), prioritize_newest)),
+        } => json!(next_translation_batch(
+            &items,
+            priority_key.as_deref(),
+            prioritize_newest
+        )),
         Command::CloudConsent {
             task,
             manual_consent,
@@ -99,7 +103,9 @@ mod tests {
 
     #[test]
     fn json_protocol_prepares_context() {
-        let result = handle(r#"{"op":"recent_context","messages":[{"side":"left","text":"Hello"}]}"#).unwrap();
+        let result =
+            handle(r#"{"op":"recent_context","messages":[{"side":"left","text":"Hello"}]}"#)
+                .unwrap();
         assert_eq!(result["ok"], true);
         assert_eq!(result["result"][0]["text"], "Hello");
     }
