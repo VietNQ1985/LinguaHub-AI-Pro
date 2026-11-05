@@ -13,7 +13,11 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "package:windows": "node scripts/package-windows.mjs",
-    "dist": "npm run build && npm run package:windows"
+    "dist": "npm run build && npm run package:windows",
+    "build:tauri-ui": "vite build --config vite.tauri.config.ts",
+    "dev:tauri-ui": "vite --config vite.tauri.config.ts",
+    "tauri:build": "tauri build",
+    "tauri:dev": "tauri dev"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "1.3.1",
