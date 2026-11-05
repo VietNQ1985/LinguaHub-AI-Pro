@@ -177,6 +177,7 @@ fn update_unread<R: Runtime>(app: &AppHandle<R>, service: &str, next: Value) {
         (previous, inner.notification_armed.contains(service))
     };
     emit_unread(app);
+    crate::tray_badge::refresh(app);
     if !armed {
         return;
     }
@@ -195,6 +196,7 @@ fn reset_unread<R: Runtime>(app: &AppHandle<R>, service: &str) {
         inner.unread.insert(service.to_owned(), json!(0));
     }
     emit_unread(app);
+    crate::tray_badge::refresh(app);
     // Treat the first counts after a page load as the baseline, not as new messages.
     let app = app.clone();
     let service = service.to_owned();
