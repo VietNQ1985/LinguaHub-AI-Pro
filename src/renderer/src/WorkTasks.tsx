@@ -3,7 +3,8 @@ import {
   CheckCircle2, Circle, Clock, Calendar, AlertCircle, Star,
   Play, Plus, Search, Trash2, ExternalLink, Copy, Check,
   Sparkles, ArrowLeft, CheckSquare, ListTodo, X, Sun,
-  RotateCcw, Zap, BarChart2
+  RotateCcw, Zap, BarChart2, LayoutList, Columns3, Download,
+  Undo2
 } from 'lucide-react'
 
 export type TaskSourceSnapshot = {
@@ -84,6 +85,7 @@ export function WorkTasks({
   const [query, setQuery] = useState('')
   const [sourceFilter, setSourceFilter] = useState('all')
   const [sortBy, setSortBy] = useState<'default' | 'due' | 'updated' | 'title'>('default')
+  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list')
   const [suggestions, setSuggestions] = useState<WorkTask[]>([])
   const [busy, setBusy] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -120,6 +122,36 @@ export function WorkTasks({
     cancel()
     setSuggestions([])
   }, [service, model, sourceSnapshot])
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement
+      const tagName = activeEl?.tagName.toLowerCase()
+      if (tagName === 'input' || tagName === 'textarea' || tagName === 'select' || (activeEl as HTMLElement)?.isContentEditable) {
+        if (e.key === 'Escape' && draft) {
+          setDraft(null)
+        }
+        return
+      }
+
+      if ((e.key === 'n' || e.key === 'N') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault()
+        const input = document.querySelector<HTMLInputElement>('.task-quick-add input')
+        input?.focus()
+      } else if (e.key === 'Escape') {
+        if (draft) {
+          e.preventDefault()
+          setDraft(null)
+        }
+      } else if (e.key === '?') {
+        e.preventDefault()
+        setMessage('⌨ Phím tắt: N = Thêm việc · Esc = Đóng chi tiết · ? = Trợ giúp')
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [draft])
 
   const persist = async (value: WorkTask) => {
     setSaving(true)
@@ -273,6 +305,38 @@ export function WorkTasks({
     }
   }
 
+  const exportToJSON = async () => {
+    try {
+      const json = JSON.stringify(rows, null, 2)
+      await window.lingua.writeClipboardText(json)
+      setMessage(`Đã sao chép ${rows.length} công việc dạng JSON vào clipboard.`)
+    } catch {
+      setMessage('Không thể sao chép dữ liệu JSON.')
+    }
+  }
+
+  const exportToCSV = async () => {
+    try {
+      const escape = (s: string) => `"${(s || '').replace(/"/g, '""')}"`
+      const header = 'Tiêu đề,Ghi chú,Trạng thái,Quan trọng,Hạn chót,Nhắc lúc,Nguồn,Số bước'
+      const csvRows = rows.map(t => [
+        escape(t.title),
+        escape(t.description),
+        t.status === 'done' ? 'Đã xong' : t.status === 'doing' ? 'Đang làm' : 'Chưa làm',
+        t.important ? 'Có' : 'Không',
+        t.dueAt ? new Date(t.dueAt).toLocaleString('vi-VN') : '',
+        t.remindAt ? new Date(t.remindAt).toLocaleString('vi-VN') : '',
+        t.source?.service ? label(t.source.service) : '',
+        String(t.steps?.length || 0)
+      ].join(','))
+      const csv = [header, ...csvRows].join('\r\n')
+      await window.lingua.writeClipboardText(csv)
+      setMessage(`Đã sao chép ${rows.length} công việc dạng CSV vào clipboard.`)
+    } catch {
+      setMessage('Không thể sao chép dữ liệu CSV.')
+    }
+  }
+
   const clearCompleted = async () => {
     const completedTasks = rows.filter(r => r.status === 'done')
     if (completedTasks.length === 0) return
@@ -389,6 +453,22 @@ export function WorkTasks({
             {copied ? <Check size={15} /> : <Copy size={15} />}
             {copied ? 'Đã chép báo cáo!' : 'Sao chép báo cáo'}
           </button>
+          <button
+            type="button"
+            className="secondary-button task-export-btn"
+            title="Xuất dữ liệu dạng JSON"
+            onClick={() => void exportToJSON()}
+          >
+            <Download size={15} /> JSON
+          </button>
+          <button
+            type="button"
+            className="secondary-button task-export-btn"
+            title="Xuất dữ liệu dạng CSV để mở Excel"
+            onClick={() => void exportToCSV()}
+          >
+            <Download size={15} /> CSV
+          </button>
           <button type="button" className="secondary-button" onClick={onBack}>
             <ArrowLeft size={16} /> Quay lại {label(service)}
           </button>
@@ -468,6 +548,9 @@ export function WorkTasks({
           <p className="task-sidebar-note">
             Danh sách lưu an toàn trên máy này. Nhắc việc tự động hiển thị qua Windows Toast khi đến giờ.
           </p>
+          <p className="task-sidebar-note task-shortcuts-note">
+            ⌨ <strong>N</strong> thêm việc · <strong>Esc</strong> đóng · <strong>?</strong> trợ giúp
+          </p>
 
           {filter === 'done' && completed.length > 0 && (
             <button type="button" className="task-clear-completed-btn" onClick={() => void clearCompleted()}>
@@ -514,6 +597,29 @@ export function WorkTasks({
               <option value="updated">Sắp xếp: Cập nhật mới nhất</option>
               <option value="title">Sắp xếp: Theo bảng chữ cái (A-Z)</option>
             </select>
+
+            <div className="task-view-toggle" role="group" aria-label="Chế độ hiển thị">
+              <button
+                type="button"
+                className={viewMode === 'list' ? 'active' : ''}
+                title="Xem danh sách"
+                aria-label="Xem danh sách"
+                aria-pressed={viewMode === 'list'}
+                onClick={() => setViewMode('list')}
+              >
+                <LayoutList size={16} />
+              </button>
+              <button
+                type="button"
+                className={viewMode === 'kanban' ? 'active' : ''}
+                title="Xem bảng Kanban"
+                aria-label="Xem bảng Kanban"
+                aria-pressed={viewMode === 'kanban'}
+                onClick={() => setViewMode('kanban')}
+              >
+                <Columns3 size={16} />
+              </button>
+            </div>
           </div>
 
           <form
@@ -632,106 +738,248 @@ export function WorkTasks({
             </p>
           )}
 
-          <div className="task-list" aria-label="Danh sách công việc">
-            {filtered.map(item => (
-              <article
-                className={`task-row ${item.status === 'done' ? 'completed' : ''} ${item.status === 'doing' ? 'in-progress' : ''}`}
-                key={item.id}
-              >
-                <input
-                  aria-label={`Hoàn thành ${item.title}`}
-                  type="checkbox"
-                  checked={item.status === 'done'}
-                  disabled={saving}
-                  onChange={e => void persist({ ...item, status: e.target.checked ? 'done' : 'todo' })}
-                />
-                <button
-                  className="task-row-body"
-                  type="button"
-                  onClick={() => {
-                    setDraft(item)
-                    setStep('')
-                  }}
-                >
-                  <div className="task-title-line">
-                    <strong>{item.title}</strong>
-                    {item.status === 'doing' && <span className="status-badge doing-badge">◉ Đang làm</span>}
-                  </div>
-
-                  <div className="task-row-meta">
-                    {item.source && (
-                      <span className="source-tag">
-                        {label(item.source.service)}
-                      </span>
-                    )}
-                    {item.dueAt && (
-                      <span className={`due-tag ${item.dueAt < clock && item.status !== 'done' ? 'overdue' : ''}`}>
-                        <Calendar size={12} /> Hạn: {new Date(item.dueAt).toLocaleString('vi-VN')}
-                      </span>
-                    )}
-                    {item.remindAt && (
-                      <span className="remind-tag">
-                        <Clock size={12} /> Nhắc: {new Date(item.remindAt).toLocaleString('vi-VN')}
-                      </span>
-                    )}
-                    {!!item.steps?.length && (
-                      <span className="steps-tag">
-                        <CheckSquare size={12} /> {item.steps.filter(s => s.done).length}/{item.steps.length} bước
-                      </span>
-                    )}
-                  </div>
-
-                  {item.source && (
-                    <blockquote className="task-evidence-preview">
-                      “{item.source.evidence}”
-                    </blockquote>
-                  )}
-                </button>
-
-                {/* Quick Action Buttons on Row */}
-                <div className="task-row-actions">
-                  {item.source && (
-                    <button
-                      type="button"
-                      className="task-action-icon-btn task-jump-btn"
-                      title={`Mở cuộc trò chuyện trong ${label(item.source.service)}`}
-                      aria-label={`Mở ${label(item.source.service)}`}
-                      onClick={() => navigateToSource(item.source!.service)}
-                    >
-                      <ExternalLink size={15} />
-                    </button>
-                  )}
-                  {item.status !== 'done' && (
-                    <button
-                      type="button"
-                      className={`task-action-icon-btn ${item.status === 'doing' ? 'active-doing' : ''}`}
-                      title={item.status === 'doing' ? 'Tạm dừng làm' : 'Bắt đầu làm việc này'}
-                      aria-label={item.status === 'doing' ? 'Tạm dừng' : 'Bắt đầu làm'}
-                      onClick={() => toggleDoing(item)}
-                    >
-                      <Play size={15} />
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    className="task-star-btn"
-                    aria-label={`Đánh dấu quan trọng ${item.title}`}
-                    aria-pressed={!!item.important}
-                    disabled={saving}
-                    onClick={() => void persist({ ...item, important: !item.important })}
+{viewMode === 'list' ? (
+            <>
+              <div className="task-list" aria-label="Danh sách công việc">
+                {filtered.map(item => (
+                  <article
+                    className={`task-row ${item.status === 'done' ? 'completed' : ''} ${item.status === 'doing' ? 'in-progress' : ''}`}
+                    key={item.id}
                   >
-                    {item.important ? <Star size={18} fill="#eab308" color="#eab308" /> : <Star size={18} color="#94a3b8" />}
-                  </button>
-                </div>
-              </article>
-            ))}
-          </div>
+                    <input
+                      aria-label={`Hoàn thành ${item.title}`}
+                      type="checkbox"
+                      checked={item.status === 'done'}
+                      disabled={saving}
+                      onChange={e => void persist({ ...item, status: e.target.checked ? 'done' : 'todo' })}
+                    />
+                    <button
+                      className="task-row-body"
+                      type="button"
+                      onClick={() => {
+                        setDraft(item)
+                        setStep('')
+                      }}
+                    >
+                      <div className="task-title-line">
+                        <strong>{item.title}</strong>
+                        {item.status === 'doing' && <span className="status-badge doing-badge">◉ Đang làm</span>}
+                      </div>
 
-          {!filtered.length && (
-            <div className="task-empty">
-              <span className="task-empty-icon"><CheckCircle2 size={48} /></span>
-              <h2>{filter === 'done' ? 'Chưa có việc hoàn thành' : 'Danh sách đang trống'}</h2>
-              <p>Thêm một việc mới hoặc bấm "Tìm việc trong chat/email" để AI tự động trích xuất các đầu việc cần làm.</p>
+                      <div className="task-row-meta">
+                        {item.source && (
+                          <span className="source-tag">
+                            {label(item.source.service)}
+                          </span>
+                        )}
+                        {item.dueAt && (
+                          <span className={`due-tag ${item.dueAt < clock && item.status !== 'done' ? 'overdue' : ''}`}>
+                            <Calendar size={12} /> Hạn: {new Date(item.dueAt).toLocaleString('vi-VN')}
+                          </span>
+                        )}
+                        {item.remindAt && (
+                          <span className="remind-tag">
+                            <Clock size={12} /> Nhắc: {new Date(item.remindAt).toLocaleString('vi-VN')}
+                          </span>
+                        )}
+                        {!!item.steps?.length && (
+                          <span className="steps-tag">
+                            <CheckSquare size={12} /> {item.steps.filter(s => s.done).length}/{item.steps.length} bước
+                          </span>
+                        )}
+                      </div>
+
+                      {item.source && (
+                        <blockquote className="task-evidence-preview">
+                          “{item.source.evidence}”
+                        </blockquote>
+                      )}
+                    </button>
+
+                    {/* Quick Action Buttons on Row */}
+                    <div className="task-row-actions">
+                      {item.source && (
+                        <button
+                          type="button"
+                          className="task-action-icon-btn task-jump-btn"
+                          title={`Mở cuộc trò chuyện trong ${label(item.source.service)}`}
+                          aria-label={`Mở ${label(item.source.service)}`}
+                          onClick={() => navigateToSource(item.source!.service)}
+                        >
+                          <ExternalLink size={15} />
+                        </button>
+                      )}
+                      {item.status !== 'done' && (
+                        <button
+                          type="button"
+                          className={`task-action-icon-btn ${item.status === 'doing' ? 'active-doing' : ''}`}
+                          title={item.status === 'doing' ? 'Tạm dừng làm' : 'Bắt đầu làm việc này'}
+                          aria-label={item.status === 'doing' ? 'Tạm dừng' : 'Bắt đầu làm'}
+                          onClick={() => toggleDoing(item)}
+                        >
+                          <Play size={15} />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="task-star-btn"
+                        aria-label={`Đánh dấu quan trọng ${item.title}`}
+                        aria-pressed={!!item.important}
+                        disabled={saving}
+                        onClick={() => void persist({ ...item, important: !item.important })}
+                      >
+                        {item.important ? <Star size={18} fill="#eab308" color="#eab308" /> : <Star size={18} color="#94a3b8" />}
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+
+              {!filtered.length && (
+                <div className="task-empty">
+                  <span className="task-empty-icon"><CheckCircle2 size={48} /></span>
+                  <h2>{filter === 'done' ? 'Chưa có việc hoàn thành' : 'Danh sách đang trống'}</h2>
+                  <p>Thêm một việc mới hoặc bấm "Tìm việc trong chat/email" để AI tự động trích xuất các đầu việc cần làm.</p>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="task-kanban" aria-label="Bảng công việc Kanban">
+              {([
+                { id: 'todo' as const, title: 'Chưa làm', icon: Circle, count: rows.filter(r => r.status === 'todo').length },
+                { id: 'doing' as const, title: 'Đang làm', icon: Play, count: rows.filter(r => r.status === 'doing').length },
+                { id: 'done' as const, title: 'Đã xong', icon: CheckCircle2, count: rows.filter(r => r.status === 'done').length }
+              ]).map(col => {
+                const colTasks = filtered.filter(item => item.status === col.id)
+                const Icon = col.icon
+                return (
+                  <div key={col.id} className={`task-kanban-col kanban-col-${col.id}`}>
+                    <div className="task-kanban-col-header">
+                      <div className="task-kanban-col-title">
+                        <Icon size={15} />
+                        <span>{col.title}</span>
+                      </div>
+                      <span className="task-kanban-col-count">{colTasks.length}</span>
+                    </div>
+
+                    <div className="task-kanban-col-cards">
+                      {colTasks.map(item => (
+                        <article
+                          key={item.id}
+                          className={`task-kanban-card ${item.status === 'done' ? 'completed' : ''} ${item.status === 'doing' ? 'in-progress' : ''}`}
+                        >
+                          <div className="task-kanban-card-top">
+                            <input
+                              type="checkbox"
+                              aria-label={`Hoàn thành ${item.title}`}
+                              checked={item.status === 'done'}
+                              disabled={saving}
+                              onChange={e => void persist({ ...item, status: e.target.checked ? 'done' : 'todo' })}
+                            />
+                            <button
+                              type="button"
+                              className="task-star-btn"
+                              aria-label={`Đánh dấu quan trọng ${item.title}`}
+                              aria-pressed={!!item.important}
+                              disabled={saving}
+                              onClick={() => void persist({ ...item, important: !item.important })}
+                            >
+                              {item.important ? <Star size={16} fill="#eab308" color="#eab308" /> : <Star size={16} color="#94a3b8" />}
+                            </button>
+                          </div>
+
+                          <button
+                            type="button"
+                            className="task-kanban-card-body"
+                            onClick={() => {
+                              setDraft(item)
+                              setStep('')
+                            }}
+                          >
+                            <strong>{item.title}</strong>
+                            {item.description && <p className="task-kanban-desc">{item.description}</p>}
+                          </button>
+
+                          <div className="task-kanban-card-meta">
+                            {item.source && (
+                              <span className="source-tag">
+                                {label(item.source.service)}
+                              </span>
+                            )}
+                            {item.dueAt && (
+                              <span className={`due-tag ${item.dueAt < clock && item.status !== 'done' ? 'overdue' : ''}`}>
+                                <Calendar size={11} /> {new Date(item.dueAt).toLocaleDateString('vi-VN')}
+                              </span>
+                            )}
+                            {!!item.steps?.length && (
+                              <span className="steps-tag">
+                                <CheckSquare size={11} /> {item.steps.filter(s => s.done).length}/{item.steps.length}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="task-kanban-card-footer">
+                            {item.status === 'todo' && (
+                              <button
+                                type="button"
+                                className="task-kanban-move-btn"
+                                onClick={() => void persist({ ...item, status: 'doing' })}
+                              >
+                                <Play size={12} /> Bắt đầu
+                              </button>
+                            )}
+                            {item.status === 'doing' && (
+                              <div className="task-kanban-split-actions">
+                                <button
+                                  type="button"
+                                  className="task-kanban-move-btn"
+                                  onClick={() => void persist({ ...item, status: 'todo' })}
+                                  title="Chuyển về Chưa làm"
+                                >
+                                  <Undo2 size={12} /> Hoãn
+                                </button>
+                                <button
+                                  type="button"
+                                  className="task-kanban-move-btn move-done"
+                                  onClick={() => void persist({ ...item, status: 'done' })}
+                                  title="Đánh dấu Hoàn thành"
+                                >
+                                  <Check size={12} /> Xong
+                                </button>
+                              </div>
+                            )}
+                            {item.status === 'done' && (
+                              <button
+                                type="button"
+                                className="task-kanban-move-btn"
+                                onClick={() => void persist({ ...item, status: 'doing' })}
+                              >
+                                <RotateCcw size={12} /> Làm lại
+                              </button>
+                            )}
+                            {item.source && (
+                              <button
+                                type="button"
+                                className="task-action-icon-btn"
+                                title={`Mở ${label(item.source.service)}`}
+                                onClick={() => navigateToSource(item.source!.service)}
+                              >
+                                <ExternalLink size={13} />
+                              </button>
+                            )}
+                          </div>
+                        </article>
+                      ))}
+
+                      {!colTasks.length && (
+                        <div className="task-kanban-col-empty">
+                          <span>Không có việc</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
         </main>

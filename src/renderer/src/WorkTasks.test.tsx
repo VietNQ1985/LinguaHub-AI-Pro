@@ -85,3 +85,86 @@ test('standup report button generates markdown and copies to clipboard',async()=
   expect(copiedText).toContain('Họp dự án với khách hàng')
  }finally{await act(async()=>root.unmount());dom.window.close();vi.unstubAllGlobals()}
 })
+
+test('view toggle switches to kanban board view with columns and cards', async () => {
+  const dom = new JSDOM('<div id="root"></div>')
+  vi.stubGlobal('window', dom.window)
+  vi.stubGlobal('document', dom.window.document)
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
+  const sampleTasks = [
+    { id: '1', title: 'Task 1 Chưa làm', status: 'todo' as const, remindAt: null },
+    { id: '2', title: 'Task 2 Đang làm', status: 'doing' as const, remindAt: null },
+    { id: '3', title: 'Task 3 Đã xong', status: 'done' as const, remindAt: null }
+  ]
+  const saveTask = vi.fn(async v => v)
+  Object.assign(dom.window, {
+    lingua: {
+      listTasks: async () => sampleTasks,
+      saveTask,
+      cancelAi: async () => true
+    }
+  })
+  const root = createRoot(dom.window.document.querySelector('#root')!)
+  try {
+    await act(async () => root.render(createElement(WorkTasks, { service: 'whatsapp', model: 'local' })))
+    const kanbanBtn = dom.window.document.querySelector('button[title="Xem bảng Kanban"]') as HTMLButtonElement
+    expect(kanbanBtn).toBeTruthy()
+    await act(async () => kanbanBtn.click())
+
+    const kanbanBoard = dom.window.document.querySelector('.task-kanban')
+    expect(kanbanBoard).toBeTruthy()
+    expect(dom.window.document.body.textContent).toContain('Chưa làm')
+    expect(dom.window.document.body.textContent).toContain('Đang làm')
+    expect(dom.window.document.body.textContent).toContain('Đã xong')
+
+    const startBtn = Array.from(dom.window.document.querySelectorAll('button')).find(b => b.textContent?.includes('Bắt đầu'))!
+    expect(startBtn).toBeTruthy()
+    await act(async () => startBtn.click())
+    expect(saveTask).toHaveBeenCalledWith(expect.objectContaining({ id: '1', status: 'doing' }))
+  } finally {
+    await act(async () => root.unmount())
+    dom.window.close()
+    vi.unstubAllGlobals()
+  }
+})
+
+test('export to JSON and CSV formats tasks into clipboard', async () => {
+  const dom = new JSDOM('<div id="root"></div>')
+  vi.stubGlobal('window', dom.window)
+  vi.stubGlobal('document', dom.window.document)
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
+  const writeClipboardText = vi.fn(async () => true)
+  const sampleTasks = [
+    { id: '1', title: 'Thiết kế hệ thống', description: 'Ghi chú A', status: 'todo' as const, remindAt: null, important: true }
+  ]
+  Object.assign(dom.window, {
+    lingua: {
+      listTasks: async () => sampleTasks,
+      writeClipboardText,
+      cancelAi: async () => true
+    }
+  })
+  const root = createRoot(dom.window.document.querySelector('#root')!)
+  try {
+    await act(async () => root.render(createElement(WorkTasks, { service: 'teams', model: 'local' })))
+    
+    const jsonBtn = dom.window.document.querySelector('button[title="Xuất dữ liệu dạng JSON"]') as HTMLButtonElement
+    expect(jsonBtn).toBeTruthy()
+    await act(async () => jsonBtn.click())
+    expect(writeClipboardText).toHaveBeenCalledTimes(1)
+    const jsonText = (writeClipboardText.mock.calls as string[][])[0][0]
+    expect(jsonText).toContain('Thiết kế hệ thống')
+
+    const csvBtn = dom.window.document.querySelector('button[title="Xuất dữ liệu dạng CSV để mở Excel"]') as HTMLButtonElement
+    expect(csvBtn).toBeTruthy()
+    await act(async () => csvBtn.click())
+    expect(writeClipboardText).toHaveBeenCalledTimes(2)
+    const csvText = (writeClipboardText.mock.calls as string[][])[1][0]
+    expect(csvText).toContain('Tiêu đề,Ghi chú')
+    expect(csvText).toContain('Thiết kế hệ thống')
+  } finally {
+    await act(async () => root.unmount())
+    dom.window.close()
+    vi.unstubAllGlobals()
+  }
+})
