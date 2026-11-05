@@ -124,7 +124,12 @@ pub fn message_identity_keys(messages: &[IdentityMessage]) -> Vec<String> {
                 .to_lowercase();
             let count = occurrences.entry(normalized.clone()).or_default();
             *count += 1;
-            match message.id.as_deref().map(str::trim).filter(|id| !id.is_empty()) {
+            match message
+                .id
+                .as_deref()
+                .map(str::trim)
+                .filter(|id| !id.is_empty())
+            {
                 Some(id) => serde_json::json!(["id", id, &normalized]).to_string(),
                 None => serde_json::json!(["text", &normalized, *count]).to_string(),
             }
@@ -261,20 +266,38 @@ mod tests {
             tone: ReplyTone::Professional,
         };
         assert!(validate_composer(&good).is_ok());
-        assert!(validate_composer(&ComposerRequest { draft: " ".into(), ..good.clone() }).is_err());
-        assert!(validate_composer(&ComposerRequest { messages: vec![], ..good.clone() }).is_err());
+        assert!(validate_composer(&ComposerRequest {
+            draft: " ".into(),
+            ..good.clone()
+        })
+        .is_err());
+        assert!(validate_composer(&ComposerRequest {
+            messages: vec![],
+            ..good.clone()
+        })
+        .is_err());
         assert!(validate_composer(&ComposerRequest {
             draft: "x".repeat(MAX_MESSAGE_CHARS + 1),
             ..good
-        }).is_err());
+        })
+        .is_err());
     }
 
     #[test]
     fn message_identity_uses_occurrences_and_stable_ids() {
         let messages = vec![
-            IdentityMessage { text: " Thank   you ".into(), id: None },
-            IdentityMessage { text: "THANK YOU".into(), id: None },
-            IdentityMessage { text: "Hello".into(), id: Some("wa-12".into()) },
+            IdentityMessage {
+                text: " Thank   you ".into(),
+                id: None,
+            },
+            IdentityMessage {
+                text: "THANK YOU".into(),
+                id: None,
+            },
+            IdentityMessage {
+                text: "Hello".into(),
+                id: Some("wa-12".into()),
+            },
         ];
         let keys = message_identity_keys(&messages);
         assert_ne!(keys[0], keys[1]);
@@ -291,7 +314,10 @@ mod tests {
     #[test]
     fn translation_batch_prefers_newest_or_matching_priority() {
         let items: Vec<_> = (0..10)
-            .map(|n| QueueItem { key: format!("m{n}"), text: format!("{n}") })
+            .map(|n| QueueItem {
+                key: format!("m{n}"),
+                text: format!("{n}"),
+            })
             .collect();
         let backlog = next_translation_batch(&items, None, false).unwrap();
         assert_eq!(backlog.lane, BatchLane::Backlog);
@@ -300,14 +326,25 @@ mod tests {
         let priority = next_translation_batch(&items, Some("m7"), false).unwrap();
         assert_eq!(priority.lane, BatchLane::Priority);
         assert_eq!(priority.messages[0].key, "m7");
-        assert_eq!(next_translation_batch(&items, None, true).unwrap().messages[0].key, "m9");
+        assert_eq!(
+            next_translation_batch(&items, None, true).unwrap().messages[0].key,
+            "m9"
+        );
         assert!(next_translation_batch(&[], None, true).is_none());
     }
 
     #[test]
     fn background_cloud_consent_and_manual_consent_remain_separate() {
-        assert!(!has_cloud_consent_for_task("replyTranslationFromChat", true, false));
-        assert!(has_cloud_consent_for_task("replyTranslationFromChat", false, true));
+        assert!(!has_cloud_consent_for_task(
+            "replyTranslationFromChat",
+            true,
+            false
+        ));
+        assert!(has_cloud_consent_for_task(
+            "replyTranslationFromChat",
+            false,
+            true
+        ));
         assert!(has_cloud_consent_for_task("coach", true, false));
         assert!(!has_cloud_consent_for_task("extractTasks", true, true));
     }
@@ -325,9 +362,18 @@ mod tests {
             busy: false,
         };
         assert!(can_copy_preview(&good));
-        assert!(!can_copy_preview(&PreviewGuard { draft: "Đã sửa".into(), ..good.clone() }));
-        assert!(!can_copy_preview(&PreviewGuard { bound_conversation: Some("chat-b".into()), ..good.clone() }));
-        assert!(!can_copy_preview(&PreviewGuard { current_settings_key: "changed".into(), ..good.clone() }));
+        assert!(!can_copy_preview(&PreviewGuard {
+            draft: "Đã sửa".into(),
+            ..good.clone()
+        }));
+        assert!(!can_copy_preview(&PreviewGuard {
+            bound_conversation: Some("chat-b".into()),
+            ..good.clone()
+        }));
+        assert!(!can_copy_preview(&PreviewGuard {
+            current_settings_key: "changed".into(),
+            ..good.clone()
+        }));
         assert!(!can_copy_preview(&PreviewGuard { busy: true, ..good }));
     }
 }
