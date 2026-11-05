@@ -13,6 +13,7 @@ mod providers;
 mod secrets;
 mod state;
 mod stt;
+mod tray_badge;
 mod urls;
 mod workspace;
 mod wv;
@@ -85,6 +86,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
             }
         })
         .build(app)?;
+    tray_badge::refresh(app);
     Ok(())
 }
 
