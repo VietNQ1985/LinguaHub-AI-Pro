@@ -411,7 +411,7 @@ pub async fn chat_authorize_visible_read(webview: Webview, app: AppHandle, state
     let authorized = if state.store.remember("chat") {
         true
     } else {
-        let (response, checked) = dialog::ask(&app, Ask::question("Đọc tin nhắn để dịch", "Cho phép LinguaHub đọc tin nhắn đang hiển thị để dịch?", "Chỉ đọc chữ trên màn hình (WhatsApp, Teams, Zalo, chat Zoom/Meet), không chụp màn hình. Ollama xử lý trên máy; dịch vụ cloud cần anh đồng ý riêng.", ["Hủy", "Cho phép"]).default_button(1).checkbox("Ghi nhớ, không hỏi lại", true)).await;
+        let (response, checked) = dialog::ask(&app, Ask::question("Đọc nội dung để dịch", "Cho phép LinguaHub đọc tin nhắn hoặc email đang mở để dịch?", "Chỉ đọc chữ đang hiển thị (WhatsApp, Teams, Zalo, Outlook, chat Zoom/Meet), không chụp màn hình. Ollama xử lý trên máy; dịch vụ cloud cần anh đồng ý riêng.", ["Hủy", "Cho phép"]).default_button(1).checkbox("Ghi nhớ, không hỏi lại", true)).await;
         if response == 1 && checked {
             let _ = state.store.set_remember("chat", true);
         }
@@ -446,7 +446,7 @@ pub fn chat_stop_visible_read(webview: Webview, state: State<AppState>) -> Res<(
 pub async fn chat_read_visible(webview: Webview, app: AppHandle, state: State<'_, AppState>) -> Res<Value> {
     trusted(&webview)?;
     if !state.lock().chat_read_authorized {
-        return Err("Chưa cho phép đọc chữ chat đang hiển thị.".into());
+        return Err("Chưa cho phép đọc chữ đang hiển thị.".into());
     }
     workspace::read_visible(&app).await.map_err(fail)
 }
