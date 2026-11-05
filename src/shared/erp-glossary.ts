@@ -1,4 +1,17 @@
 export const ERP_GLOSSARY = [
+  ['D365 F&O', 'D365 F&O'],
+  ['Business Central', 'Business Central'],
+  ['WMS', 'WMS'],
+  ['LIMS', 'LIMS'],
+  ['UOM', 'đơn vị tính (UOM)'],
+  ['unit of measure', 'đơn vị tính'],
+  ['test code', 'mã kiểm nghiệm'],
+  ['LoD', 'LoD'],
+  ['LoQ', 'LoQ'],
+  ['accounts payable', 'kế toán phải trả'],
+  ['accounts receivable', 'kế toán phải thu'],
+  ['payment', 'thanh toán'],
+  ['budget', 'ngân sách'],
   ['Microsoft Dynamics 365', 'Microsoft Dynamics 365'],
   ['financial dimensions', 'chiều tài chính'],
   ['general ledger', 'sổ cái'],
@@ -24,6 +37,13 @@ export const ERP_GLOSSARY = [
   ['master data', 'dữ liệu danh mục'],
   ['chart of accounts', 'hệ thống tài khoản kế toán'],
   ['subledger', 'sổ kế toán chi tiết'],
+  // Added after meeting-caption benchmarks where these terms were left in English or mistranslated.
+  ['goods receipt', 'phiếu nhập kho'],
+  ['posted', 'đã ghi sổ'],
+  ['price variance', 'chênh lệch giá'],
+  ['invoice on hold', 'hóa đơn đang bị tạm giữ'],
+  ['close the quarter', 'khóa sổ quý'],
+  ['forecast', 'dự báo'],
 ] as const
 
 export const ERP_GLOSSARY_PROMPT = ERP_GLOSSARY

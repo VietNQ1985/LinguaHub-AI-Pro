@@ -1,0 +1,104 @@
+# LinguaHub — Hướng dẫn sử dụng
+
+LinguaHub gom các ứng dụng nhắn tin/họp (WhatsApp, Telegram, Microsoft Teams, Outlook, Zalo Web, Zoom, Google Meet) vào một cửa sổ. Khung bên phải dịch tin nhắn sang tiếng Việt, gợi ý câu trả lời bằng tiếng Anh và có phụ đề cuộc họp.
+
+Có 2 bản, chức năng giống nhau:
+
+| | Bản Tauri (Rust) — khuyên dùng | Bản Electron |
+|---|---|---|
+| Thư mục | `LinguaHub-Tauri` | `LinguaHub-AI-Pro` |
+| RAM | nhẹ hơn (~500–750 MB khi mở vài app) | nặng hơn (~800 MB+) |
+| Nhận dạng giọng nói | whisper.cpp chạy trên máy, nhanh (1–2 giây) | transformers.js trong trình duyệt, chậm hơn |
+
+---
+
+## 1. Lần mở đầu tiên: chọn ứng dụng
+
+Màn hình **"Anh dùng ứng dụng nào?"** hiện ra. Tick các app cần dùng rồi bấm tiếp. App nào chưa chọn sẽ không được tải, để tiết kiệm RAM.
+
+Muốn đổi sau này: **Cài đặt → 🧩 Ứng dụng và quyền → Ứng dụng**.
+
+Mỗi app đăng nhập như trên trình duyệt (quét QR WhatsApp/Zalo/Telegram, tài khoản Microsoft/Google). Phiên đăng nhập được lưu lại cho lần sau.
+
+## 2. Dịch tin nhắn
+
+1. Mở một cuộc trò chuyện.
+2. Ở khung phải, bấm **Bật dịch** và cho phép LinguaHub đọc chữ trong chat. Quyền này nằm trong **Cài đặt → Ứng dụng và quyền**.
+3. LinguaHub đọc các tin **đang hiển thị trên màn hình**: không chụp màn hình, không đọc chat đang ẩn.
+   - Tin tiếng Việt được bỏ qua.
+   - Ngôn ngữ khác được dịch sang tiếng Việt, mô hình AI tự nhận ra ngôn ngữ.
+4. Bấm vào một dòng dịch để xem câu gốc.
+
+## 3. Trả lời
+
+Thẻ **Trả lời** có ba nút trên một hàng:
+
+- **Nói** 🎙: nói tiếng Việt, app chuyển thành chữ.
+- **Dịch**: dịch câu tiếng Việt anh gõ sang tiếng Anh theo ngữ cảnh cuộc chat.
+- **Gợi ý**: tạo 3 câu trả lời dựa trên các tin đang hiển thị.
+
+Mỗi gợi ý có các nút:
+
+- **➤ Gửi**: dán thẳng câu vào ô chat của app đang mở và gửi đi. Hãy kiểm tra đúng người nhận trước khi bấm.
+- **Sửa**: đưa câu vào ô soạn để chỉnh.
+- **Nghe**: đọc to câu tiếng Anh.
+- **Chép**: sao chép câu.
+
+Bấm vào phần tiếng Việt của gợi ý để xem đầy đủ nghĩa.
+
+## 4. Gọi điện Zalo
+
+Zalo Web không có tính năng gọi. Trong tab Zalo Web có nút 📞 (gọi thoại) và 🎥 (gọi video). Khi bấm:
+
+1. LinguaHub mở **Zalo PC** (phải cài sẵn).
+2. Tìm đúng tên người đang chat. Nếu tìm ra **đúng 1** người thì bấm gọi.
+
+> ⚠ Zalo PC chỉ đăng nhập được 1 tài khoản. Cuộc gọi luôn đi từ tài khoản đang mở trên Zalo PC. Nếu anh dùng nhiều tài khoản Zalo, hãy chuyển Zalo PC sang đúng tài khoản trước khi bấm gọi.
+
+## 5. Cuộc họp (Teams / Zoom / Meet)
+
+- **Teams:** bật phụ đề có sẵn của Teams. LinguaHub đọc phụ đề đó rồi dịch, nên nhẹ máy nhất.
+- **Zoom / Meet:** bật **Phụ đề cuộc họp**. LinguaHub nghe âm thanh máy tính và nhận dạng giọng nói ngay trên máy, rồi dịch.
+- Chat trong cuộc họp cũng được đọc và gợi ý trả lời như chat thường.
+
+## 6. Cài đặt
+
+Cài đặt chia thành 5 nhóm:
+
+- **🧩 Ứng dụng và quyền:** chọn app; cấp quyền đọc chat và quyền gửi nội dung lên AI đám mây.
+- **🤖 AI:**
+  - **Chọn mô hình:** mô hình dịch và mô hình gợi ý trả lời có thể khác nhau.
+  - **Nguồn AI:**
+    - **Ollama trên máy:** miễn phí, không gửi dữ liệu ra ngoài. Mặc định dùng `qwen2.5:7b`, chiếm khoảng 3 GB RAM khi đang dùng và tự nhả sau 3 phút rảnh.
+    - **ChatGPT:** đăng nhập bằng tài khoản ChatGPT trả phí. Tài khoản Free sẽ báo lỗi.
+    - **Gemini:** cần API key.
+    - **Máy AI riêng:** máy chủ tương thích OpenAI, ví dụ qua ngrok.
+- **🎙 Giọng nói** (bản Tauri):
+  - Chọn mô hình cho nút **Nói** (khuyên dùng **PhoWhisper Small** cho tiếng Việt) và cho **Phụ đề cuộc họp** (khuyên dùng **Whisper Small**).
+  - Mô hình tải một lần từ huggingface.co, app hỏi trước khi tải.
+- **🎨 Giao diện.**
+- **🔒 Riêng tư, thông báo và dữ liệu:**
+  - Che email/số điện thoại trước khi gửi AI đám mây.
+  - Thông báo tin nhắn mới: bấm vào thông báo sẽ nhảy tới đúng app.
+  - Thời hạn giữ dữ liệu học; xoá dữ liệu trên máy.
+
+## 7. Học tiếng Anh
+
+Gồm từ vựng rút ra từ các cuộc chat, lịch ôn, bài học trong ngày và luyện nói (ghi âm rồi nghe lại).
+
+## 8. Quyền riêng tư
+
+- Không lưu nội dung chat, mật khẩu hay cookie vào cơ sở dữ liệu của app.
+- API key và token ChatGPT được mã hoá bằng Windows (DPAPI) và chỉ dùng được trên máy này, dưới tài khoản Windows này.
+- Dùng Ollama và nhận dạng giọng nói trên máy thì không có gì gửi ra ngoài. Dùng ChatGPT/Gemini thì chữ tin nhắn được gửi tới nhà cung cấp đó, và app hỏi xác nhận riêng trước.
+
+## 9. Lỗi thường gặp
+
+| Hiện tượng | Cách xử lý |
+|---|---|
+| ChatGPT báo `invalid_grant` / không kết nối | Tài khoản ChatGPT Free không dùng được; dùng tài khoản Plus/Pro hoặc chuyển sang Ollama. |
+| Không dịch | Kiểm tra đã **Bật dịch** và đã cấp quyền đọc chat; Ollama phải đang chạy. |
+| Nút Nói chậm lần đầu | Lần đầu phải tải mô hình (150–500 MB); các lần sau 1–2 giây. |
+| App hiện "Tải WhatsApp cho Windows" | LinguaHub đã tự ẩn các quảng cáo tải app; nếu trang đổi giao diện thì báo để cập nhật. |
+| Gọi Zalo không được | Cài và đăng nhập Zalo PC đúng tài khoản; tên liên hệ phải tìm ra duy nhất 1 người. |
+| RAM cao | Bỏ bớt app không dùng trong **Ứng dụng**; app ẩn đã tự chuyển sang chế độ ít bộ nhớ. |

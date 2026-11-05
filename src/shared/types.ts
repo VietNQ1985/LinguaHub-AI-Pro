@@ -3,6 +3,8 @@ export type AppRoute =
   | 'dashboard'
   | 'whatsapp'
   | 'teams'
+  | 'zoom'
+  | 'meet'
   | 'live-translation'
   | 'ai-reply'
   | 'coach'
