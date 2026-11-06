@@ -1,4 +1,4 @@
-import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -17,15 +17,19 @@ const configPath=join(staging,'builder.json')
 await writeFile(configPath,JSON.stringify(configuration,null,2))
 const child=spawn(process.execPath,[join(root,'node_modules/electron-builder/cli.js'),'--win','nsis','--config',configPath],{cwd:root,stdio:'inherit',windowsHide:true})
 child.on('error',error=>{console.error(error.message);process.exitCode=1})
-child.on('exit',async code=>{
-  process.exitCode=code ?? 1
-  if(code===0){
-    try{
+child.on('close',async code=>{
+  try{
+    process.exitCode=code ?? 1
+    if(code===0){
       const filename=join(outputDirectory,'LinguaHub-AI-Pro-Setup.exe')
       const bytes=await readFile(filename)
       const hash=createHash('sha256').update(bytes).digest('hex')
       await writeFile(`${filename}.sha256`,`${hash}  LinguaHub-AI-Pro-Setup.exe\n`)
       console.log(`Installer SHA-256: ${hash}`)
-    }catch(error){console.error(error.message);process.exitCode=1}
+    }
+  }catch(error){console.error(error.message);process.exitCode=1}
+  finally{
+    try{await rm(staging,{recursive:true,force:true})}
+    catch(error){console.error(error.message);process.exitCode=1}
   }
 })
